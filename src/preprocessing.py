@@ -2,7 +2,7 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
-from config import (
+from src.config import (
     ID_COLUMN,
     NEGATIVE_TARGET_LABEL,
     POSITIVE_TARGET_LABEL,

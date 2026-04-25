@@ -4,7 +4,7 @@ from sklearn.model_selection import GridSearchCV
 from sklearn.pipeline import Pipeline
 from xgboost import XGBClassifier
 from imblearn.over_sampling import SMOTE
-from config import (
+from src.config import (
     DATA_PATH,
     MLFLOW_EXPERIMENT_NAME,
     MODEL_PATH,
@@ -13,7 +13,7 @@ from config import (
     get_mlflow_tracking_uri,
     load_dataset,
 )
-from preprocessing import build_preprocessor, clean, encode_target
+from src.preprocessing import build_preprocessor, clean, encode_target
 
 def main():
     ensure_runtime_dirs()
