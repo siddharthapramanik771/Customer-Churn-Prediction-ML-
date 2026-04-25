@@ -1,9 +1,7 @@
 import joblib
-import numpy as np
+from config import MODEL_PATH
 
-BUNDLE_PATH = "models/model.joblib"
-
-bundle = joblib.load(BUNDLE_PATH)
+bundle = joblib.load(MODEL_PATH)
 pre = bundle["preprocessor"]
 model = bundle["model"]
 

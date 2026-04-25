@@ -19,8 +19,9 @@ Data → Feature Pipeline → Training → MLflow (tracking/registry)
 → Predictions → Dashboard (Streamlit)
 
 ## ⚙️ Quick Start
-1) Place dataset as `data/data.csv` (Telco Churn; target `churn`)
-2) Build & run:
+1) Place dataset as `data/data.csv` (current dataset target: `Churn`)
+2) Update [src/config.py](</c:/Users/SIDDHARTA PRAMANIK/PycharmProjects/Customer Churn Prediction (ML)/src/config.py>) if your dataset path, target column, or model settings change.
+3) Build & run:
    docker-compose up --build
 
 ## 🔌 Endpoints
