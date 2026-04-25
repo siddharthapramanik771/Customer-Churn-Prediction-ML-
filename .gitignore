@@ -29,5 +29,5 @@ Thumbs.db
 mlruns/
 
 # Local datasets
-data/*.csv
+data/*.xlsx
 !data/README.md
