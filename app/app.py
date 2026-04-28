@@ -1,183 +1,213 @@
-import streamlit as st
-import requests
 import time
+from dataclasses import dataclass
 
-st.title("📊 Churn Risk Dashboard (Async)")
+import pandas as pd
+import streamlit as st
+from pandas.api.types import is_integer_dtype, is_numeric_dtype
 
-API_BASE = "http://api:8000"
-PREDICT_ASYNC = f"{API_BASE}/predict_async"
-RESULT_ENDPOINT = f"{API_BASE}/result"
+from src.config import RUNTIME_CONFIG
+from src.predict import ChurnPredictor
+from src.preprocessing import DEFAULT_PREPROCESSOR
 
-st.write("Enter a minimal subset of features (must match training schema).")
-# --- Full input form ---
-with st.expander("Input features (expand to enter full record)", expanded=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        gender = st.selectbox("gender", ["Female", "Male"], index=0)
-        SeniorCitizen = st.selectbox("SeniorCitizen", [0, 1], index=0)
-        Dependents = st.selectbox("Dependents", ["No", "Yes"], index=0)
-        tenure = st.slider("tenure", 0, 72, 12)
-        Contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"], index=0)
-        PaperlessBilling = st.selectbox("PaperlessBilling", ["No", "Yes"], index=1)
-        MonthlyCharges = st.number_input("MonthlyCharges", value=70.0)
-        TotalRevenue = st.number_input("TotalRevenue", value=1000.0)
 
-    with col2:
-        InternetService = st.selectbox("InternetService", ["DSL", "Fiber optic", "No"], index=0)
-        OnlineSecurity = st.selectbox("OnlineSecurity", ["No", "Yes", "No internet service"], index=0)
-        OnlineBackup = st.selectbox("OnlineBackup", ["No", "Yes", "No internet service"], index=0)
-        DeviceProtection = st.selectbox("DeviceProtection", ["No", "Yes", "No internet service"], index=0)
-        TechSupport = st.selectbox("TechSupport", ["No", "Yes", "No internet service"], index=0)
-        StreamingTV = st.selectbox("StreamingTV", ["No", "Yes", "No internet service"], index=0)
-        StreamingMovies = st.selectbox("StreamingMovies", ["No", "Yes", "No internet service"], index=0)
+@dataclass(frozen=True)
+class PredictionResult:
+    churn_probability: float
+    label: int
+    prediction: str
 
-    # Additional numeric fields
-    col3, col4 = st.columns(2)
-    with col3:
-        TotalDayMinutes = st.number_input("TotalDayMinutes", value=0.0)
-        TotalEveMinutes = st.number_input("TotalEveMinutes", value=0.0)
-        TotalNightMinutes = st.number_input("TotalNightMinutes", value=0.0)
-        TotalIntlMinutes = st.number_input("TotalIntlMinutes", value=0.0)
-        TotalDayCalls = st.number_input("TotalDayCalls", value=0)
-        TotalEveCalls = st.number_input("TotalEveCalls", value=0)
 
-    with col4:
-        TotalNightCalls = st.number_input("TotalNightCalls", value=0)
-        TotalIntlCalls = st.number_input("TotalIntlCalls", value=0)
-        TotalCall = st.number_input("TotalCall", value=0)
-        NumbervMailMessages = st.number_input("NumbervMailMessages", value=0)
-        CustomerServiceCalls = st.number_input("CustomerServiceCalls", value=0)
+class ReferenceDataService:
+    def __init__(self, config=RUNTIME_CONFIG) -> None:
+        self.config = config
 
-    # Phone / other
-    PhoneService = st.selectbox("PhoneService", ["No", "Yes"], index=1)
-    MultipleLines = st.selectbox("MultipleLines", ["No", "Yes", "No phone service"], index=0)
-    InternationalPlan = st.selectbox("InternationalPlan", ["No", "Yes"], index=0)
-    VoiceMailPlan = st.selectbox("VoiceMailPlan", ["No", "Yes"], index=0)
-    PaymentMethod = st.selectbox("PaymentMethod", ["Electronic check", "Mailed check", "Bank transfer (automatic)", "Credit card (automatic)"], index=0)
-    MaritalStatus = st.selectbox("MaritalStatus", ["Single", "Married", "Divorced", "Unknown"], index=0)
+    def load(self) -> pd.DataFrame | None:
+        if not self.config.data_path.exists():
+            return None
+        return DEFAULT_PREPROCESSOR.clean(self.config.load_dataset())
 
-    payload = {
-        "data": {
-            "gender": gender,
-            "SeniorCitizen": SeniorCitizen,
-            "Dependents": Dependents,
-            "tenure": int(tenure),
-            "Contract": Contract,
-            "PaperlessBilling": PaperlessBilling,
-            "MonthlyCharges": float(MonthlyCharges),
-            "TotalRevenue": float(TotalRevenue),
-            "InternetService": InternetService,
-            "OnlineSecurity": OnlineSecurity,
-            "OnlineBackup": OnlineBackup,
-            "DeviceProtection": DeviceProtection,
-            "TechSupport": TechSupport,
-            "StreamingTV": StreamingTV,
-            "StreamingMovies": StreamingMovies,
-            "TotalDayMinutes": float(TotalDayMinutes),
-            "TotalEveMinutes": float(TotalEveMinutes),
-            "TotalNightMinutes": float(TotalNightMinutes),
-            "TotalIntlMinutes": float(TotalIntlMinutes),
-            "TotalDayCalls": int(TotalDayCalls),
-            "TotalEveCalls": int(TotalEveCalls),
-            "TotalNightCalls": int(TotalNightCalls),
-            "TotalIntlCalls": int(TotalIntlCalls),
-            "TotalCall": int(TotalCall),
-            "NumbervMailMessages": int(NumbervMailMessages),
-            "CustomerServiceCalls": int(CustomerServiceCalls),
-            "PhoneService": PhoneService,
-            "MultipleLines": MultipleLines,
-            "InternationalPlan": InternationalPlan,
-            "VoiceMailPlan": VoiceMailPlan,
-            "PaymentMethod": PaymentMethod,
-            "MaritalStatus": MaritalStatus,
-        }
-    }
 
-if st.button("Submit"):
-    try:
-        resp = requests.post(PREDICT_ASYNC, json=payload, timeout=10)
-        resp.raise_for_status()
-    except Exception as exc:
-        st.error(f"Failed to submit task: {exc}")
-    else:
-        data = resp.json()
-        task_id = data.get("task_id")
-        if not task_id:
-            st.error(f"Unexpected response from API: {data}")
-        else:
-            st.info(f"Task submitted: {task_id}. Polling for result...")
-            placeholder = st.empty()
-            progress = st.progress(0)
-            timeout_seconds = 30
-            interval = 1
-            start = time.time()
-            step = 0
-            while time.time() - start < timeout_seconds:
-                try:
-                    r = requests.get(f"{RESULT_ENDPOINT}/{task_id}", timeout=5)
-                    if r.ok:
-                        j = r.json()
-                        status = j.get("status")
-                        if status == "done":
-                            placeholder.success("Result ready")
-                            # show result object
-                            result = j.get("result")
-                            if isinstance(result, dict):
-                                st.json(result)
-                            else:
-                                st.write(result)
-                            break
-                        else:
-                            placeholder.info("Processing...")
-                    else:
-                        placeholder.warning(f"Status check failed: {r.status_code}")
-                except Exception:
-                    placeholder.warning("Error checking status; retrying...")
+class LocalPredictionService:
+    def __init__(
+        self,
+        predictor: ChurnPredictor | None = None,
+        config=RUNTIME_CONFIG,
+    ) -> None:
+        self.predictor = predictor or ChurnPredictor()
+        self.config = config
 
-                step += 1
-                progress.progress(int(min(100, (step * interval) / timeout_seconds * 100)))
-                time.sleep(interval)
+    def predict(self, payload: dict) -> PredictionResult:
+        probability = self.predictor.predict_probability(payload)
+        label = int(probability >= self.config.prediction_threshold)
+        prediction = (
+            self.config.positive_target_label
+            if label
+            else self.config.negative_target_label
+        )
+        return PredictionResult(probability, label, prediction)
 
-            else:
-                st.warning("Timed out waiting for result. Use the Task ID to query later.")
 
-# --- Data exploration / charts ---
-st.header("Data Explorer")
-import os
-import pandas as _pd
-# Resolve data path relative to this script's location so it works inside Docker.
-base_dir = os.path.dirname(__file__)  # app/ directory inside container
-data_path = os.path.abspath(os.path.join(base_dir, "..", "data", "data.csv"))
-if os.path.exists(data_path):
-    try:
-        df = _pd.read_csv(data_path)
+class DashboardRenderer:
+    def __init__(
+        self,
+        reference_data_service: ReferenceDataService | None = None,
+        prediction_service: LocalPredictionService | None = None,
+        config=RUNTIME_CONFIG,
+    ) -> None:
+        self.reference_data_service = reference_data_service or ReferenceDataService(config)
+        self.prediction_service = prediction_service or LocalPredictionService(
+            config=config
+        )
+        self.config = config
+
+    @st.cache_data
+    def load_reference_data(_self) -> pd.DataFrame | None:
+        return _self.reference_data_service.load()
+
+    def render_feature_inputs(self, feature_df: pd.DataFrame) -> dict:
+        payload = {}
+        columns = st.columns(2)
+
+        for index, column_name in enumerate(feature_df.columns):
+            series = feature_df[column_name]
+            panel = columns[index % 2]
+
+            with panel:
+                if is_numeric_dtype(series):
+                    payload[column_name] = self.render_numeric_input(column_name, series)
+                else:
+                    payload[column_name] = self.render_categorical_input(column_name, series)
+
+        return payload
+
+    @staticmethod
+    def render_numeric_input(column_name: str, series: pd.Series) -> int | float:
+        median_value = series.median()
+        min_value = series.min()
+        max_value = series.max()
+
+        if is_integer_dtype(series):
+            return int(
+                st.number_input(
+                    column_name,
+                    min_value=int(min_value),
+                    max_value=int(max_value),
+                    value=int(round(median_value)),
+                    step=1,
+                )
+            )
+
+        step = max((float(max_value) - float(min_value)) / 100, 0.1)
+        return float(
+            st.number_input(
+                column_name,
+                min_value=float(min_value),
+                max_value=float(max_value),
+                value=float(round(median_value, 2)),
+                step=float(step),
+                format="%.4f",
+            )
+        )
+
+    @staticmethod
+    def render_categorical_input(column_name: str, series: pd.Series) -> str:
+        options = sorted(series.dropna().astype(str).unique().tolist())
+        modes = series.mode(dropna=True)
+        default_value = str(modes.iloc[0]) if not modes.empty else options[0]
+        default_index = options.index(default_value) if default_value in options else 0
+        return st.selectbox(column_name, options, index=default_index)
+
+    @staticmethod
+    def render_prediction_result(result: PredictionResult, elapsed_seconds: float) -> None:
+        st.success("Prediction complete")
+        left, right, extra = st.columns(3)
+        left.metric("Prediction", result.prediction)
+        right.metric("Probability", f"{result.churn_probability:.2%}")
+        extra.metric("Latency", f"{elapsed_seconds:.2f}s")
+
+        st.progress(float(result.churn_probability))
+        st.json(
+            {
+                "churn_probability": result.churn_probability,
+                "label": result.label,
+                "prediction": result.prediction,
+            }
+        )
+
+    def render_data_explorer(self, df: pd.DataFrame, feature_df: pd.DataFrame) -> None:
+        st.header("Data Explorer")
+        left, right = st.columns(2)
+        left.metric("Rows", len(df))
+        right.metric("Features", feature_df.shape[1])
+
+        if self.config.target_column in df.columns:
+            st.subheader("Target distribution")
+            st.bar_chart(df[self.config.target_column].value_counts())
+
         st.subheader("Preview")
         st.dataframe(df.head())
-        st.subheader("Summary statistics")
-        st.write(df.describe(include='all'))
 
-        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
-        cat_cols = df.select_dtypes(include=['object', 'category']).columns.tolist()
+        st.subheader("Summary statistics")
+        st.write(df.describe(include="all"))
+
+        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
+        categorical_cols = df.select_dtypes(exclude=["number"]).columns.tolist()
 
         st.subheader("Numeric feature distributions")
-        num_choice = st.selectbox("Choose numeric feature", [None] + numeric_cols)
-        if num_choice:
-            series = df[num_choice].dropna()
-            bins = 20
-            counts = series.groupby(_pd.cut(series, bins=bins)).size()
+        numeric_choice = st.selectbox("Choose numeric feature", [""] + numeric_cols)
+        if numeric_choice:
+            series = df[numeric_choice].dropna()
+            counts = series.groupby(pd.cut(series, bins=20)).size()
             st.bar_chart(counts)
 
         st.subheader("Categorical feature counts")
-        cat_choice = st.selectbox("Choose categorical feature", [None] + cat_cols)
-        if cat_choice:
-            vc = df[cat_choice].fillna("(missing)").value_counts().nlargest(50)
-            st.bar_chart(vc)
+        categorical_choice = st.selectbox(
+            "Choose categorical feature", [""] + categorical_cols
+        )
+        if categorical_choice:
+            value_counts = (
+                df[categorical_choice].fillna("(missing)").value_counts().nlargest(50)
+            )
+            st.bar_chart(value_counts)
 
-        st.subheader("Correlation (numeric)")
         if len(numeric_cols) >= 2:
-            corr = df[numeric_cols].corr()
-            st.dataframe(corr)
-    except Exception as e:
-        st.warning(f"Failed to load data for explorer: {e}")
-else:
-    st.info("No data file found at ../data/data.csv — add your dataset to enable charts.")
+            st.subheader("Correlation matrix")
+            st.dataframe(df[numeric_cols].corr())
+
+    def render(self) -> None:
+        st.set_page_config(page_title="Customer Churn Dashboard", layout="wide")
+        st.title("Customer Churn Dashboard")
+        st.caption(
+            "Submit a customer record for asynchronous scoring and inspect the reference dataset."
+        )
+
+        df = self.load_reference_data()
+        if df is None:
+            st.error(
+                f"Dataset not found at {self.config.data_path}. Add the training data to enable the dashboard."
+            )
+            st.stop()
+
+        feature_df = df.drop(columns=[self.config.target_column], errors="ignore")
+        st.write(
+            f"Loaded {len(df)} cleaned rows and {feature_df.shape[1]} input features from `{self.config.data_path.name}`."
+        )
+
+        with st.form("prediction_form"):
+            payload = self.render_feature_inputs(feature_df)
+            submitted = st.form_submit_button("Predict churn risk")
+
+        if submitted:
+            try:
+                start = time.time()
+                result = self.prediction_service.predict(payload)
+            except Exception as exc:
+                st.error(f"Prediction failed: {exc}")
+            else:
+                self.render_prediction_result(result, time.time() - start)
+
+        self.render_data_explorer(df, feature_df)
+
+
+def main() -> None:
+    DashboardRenderer().render()
