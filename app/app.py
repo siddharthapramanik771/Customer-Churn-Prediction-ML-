@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+import json
+from pathlib import Path
 import time
 
 import pandas as pd
@@ -11,6 +14,12 @@ from src.predict import ChurnPrediction, ChurnPredictor
 from src.preprocessing import DataPreprocessor
 
 
+@dataclass(frozen=True)
+class ReferenceDataset:
+    frame: pd.DataFrame
+    source_path: Path
+
+
 class ReferenceDataService:
     def __init__(
         self,
@@ -20,10 +29,36 @@ class ReferenceDataService:
         self.config = config
         self.preprocessor = preprocessor or DataPreprocessor.from_config(config)
 
-    def load(self) -> pd.DataFrame | None:
-        if not self.config.data_path.exists():
+    def load(self) -> ReferenceDataset | None:
+        data_path = self.resolve_reference_data_path()
+        if not data_path.exists():
             return None
-        return self.preprocessor.clean(self.config.load_dataset())
+        raw_df = self.config.load_dataset(data_path)
+        return ReferenceDataset(self.preprocessor.clean(raw_df), data_path)
+
+    def resolve_reference_data_path(self) -> Path:
+        metrics_data_path = self.read_metrics_data_path()
+        if metrics_data_path and metrics_data_path.exists():
+            return metrics_data_path
+        return self.config.data_path
+
+    def read_metrics_data_path(self) -> Path | None:
+        if not self.config.metrics_path.exists():
+            return None
+
+        try:
+            payload = json.loads(self.config.metrics_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+
+        training_data_path = payload.get("training_data_path")
+        if not training_data_path:
+            return None
+
+        path = Path(training_data_path)
+        if path.is_absolute():
+            return path
+        return self.config.project_root / path
 
 
 class LocalPredictionService:
@@ -57,7 +92,7 @@ class DashboardRenderer:
         self.config = config
 
     @st.cache_data
-    def load_reference_data(_self) -> pd.DataFrame | None:
+    def load_reference_data(_self) -> ReferenceDataset | None:
         return _self.reference_data_service.load()
 
     def render_feature_inputs(self, feature_df: pd.DataFrame) -> dict:
@@ -147,18 +182,19 @@ class DashboardRenderer:
             "Submit a customer record for local churn scoring and inspect the reference dataset."
         )
 
-        df = self.load_reference_data()
-        if df is None:
+        reference_dataset = self.load_reference_data()
+        if reference_dataset is None:
             st.error(
                 f"Dataset not found at {self.config.data_path}. "
                 "Add the training data to enable the dashboard."
             )
             st.stop()
 
+        df = reference_dataset.frame
         feature_df = df.drop(columns=[self.config.target_column], errors="ignore")
         st.write(
             f"Loaded {len(df)} cleaned rows and {feature_df.shape[1]} input "
-            f"features from `{self.config.data_path.name}`."
+            f"features from `{reference_dataset.source_path.name}`."
         )
 
         prediction_tab, analysis_tab, methodology_tab = st.tabs(

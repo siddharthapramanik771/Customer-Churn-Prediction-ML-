@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from dataclasses import replace
 from pathlib import Path
 
 import pandas as pd
@@ -47,6 +48,9 @@ class RuntimeConfig:
             return pd.read_excel(dataset_path)
 
         raise ValueError(f"Unsupported dataset format: {dataset_path}")
+
+    def with_data_path(self, data_path: Path) -> "RuntimeConfig":
+        return replace(self, data_path=data_path)
 
     def ensure_runtime_dirs(self) -> None:
         self.model_path.parent.mkdir(parents=True, exist_ok=True)

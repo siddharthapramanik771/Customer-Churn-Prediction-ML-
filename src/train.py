@@ -1,3 +1,4 @@
+import argparse
 from dataclasses import dataclass, field
 import json
 from pathlib import Path
@@ -252,6 +253,8 @@ class ChurnModelTrainer:
         payload = {
             "metrics": metrics.to_artifact_dict(),
             "best_params": best_params,
+            "training_data_path": self.relative_project_path(self.config.data_path),
+            "training_data_name": self.config.data_path.name,
             "target_column": self.config.target_column,
             "positive_target_label": self.config.positive_target_label,
             "negative_target_label": self.config.negative_target_label,
@@ -262,6 +265,13 @@ class ChurnModelTrainer:
             json.dumps(payload, indent=2),
             encoding="utf-8",
         )
+
+    def relative_project_path(self, path: Path) -> str:
+        resolved_path = path.resolve()
+        try:
+            return resolved_path.relative_to(self.config.project_root.resolve()).as_posix()
+        except ValueError:
+            return str(resolved_path)
 
     def build_artifact(
         self,
@@ -291,8 +301,30 @@ class ChurnModelTrainer:
         print("Test F1:", metrics.test_f1)
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Train the customer churn model.")
+    parser.add_argument(
+        "--data",
+        type=Path,
+        default=None,
+        help="Path to a CSV/XLS/XLSX training dataset. Defaults to data/data.csv.",
+    )
+    return parser.parse_args()
+
+
+def resolve_data_path(data_path: Path | None, config: RuntimeConfig) -> Path | None:
+    if data_path is None:
+        return None
+    if data_path.is_absolute():
+        return data_path
+    return config.project_root / data_path
+
+
 def main() -> None:
-    trainer = ChurnModelTrainer()
+    args = parse_args()
+    data_path = resolve_data_path(args.data, RUNTIME_CONFIG)
+    config = RUNTIME_CONFIG.with_data_path(data_path) if data_path else RUNTIME_CONFIG
+    trainer = ChurnModelTrainer(config=config)
     trainer.train()
 
 

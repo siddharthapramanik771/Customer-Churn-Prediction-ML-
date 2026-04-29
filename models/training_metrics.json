@@ -1,19 +1,19 @@
 {
   "metrics": {
-    "cv_best_roc_auc": 0.9597857798498137,
-    "test_roc_auc": 0.9675864692986429,
-    "test_accuracy": 0.9429429429429429,
-    "test_precision": 0.8105263157894737,
-    "test_recall": 0.7938144329896907,
-    "test_f1": 0.8020833333333334,
+    "cv_best_roc_auc": 0.8451063206225107,
+    "test_roc_auc": 0.836459665270667,
+    "test_accuracy": 0.767590618336887,
+    "test_precision": 0.5478615071283096,
+    "test_recall": 0.7192513368983957,
+    "test_f1": 0.6219653179190752,
     "confusion_matrix": [
       [
-        551,
-        18
+        811,
+        222
       ],
       [
-        20,
-        77
+        105,
+        269
       ]
     ],
     "test_size": 0.2,
@@ -24,8 +24,10 @@
   "best_params": {
     "model__learning_rate": 0.05,
     "model__max_depth": 4,
-    "model__n_estimators": 200
+    "model__n_estimators": 100
   },
+  "training_data_path": "data/new_data.csv",
+  "training_data_name": "new_data.csv",
   "target_column": "Churn",
   "positive_target_label": "Yes",
   "negative_target_label": "No",
