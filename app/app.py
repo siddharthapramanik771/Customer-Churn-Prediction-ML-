@@ -130,7 +130,13 @@ class DashboardRenderer:
 
         if self.config.target_column in df.columns:
             st.subheader("Target distribution")
-            st.bar_chart(df[self.config.target_column].value_counts())
+            target_counts = (
+                df[self.config.target_column]
+                .value_counts()
+                .rename_axis("target")
+                .reset_index(name="count")
+            )
+            st.bar_chart(target_counts, x="target", y="count")
 
         st.subheader("Preview")
         st.dataframe(df.head())
@@ -145,18 +151,29 @@ class DashboardRenderer:
         numeric_choice = st.selectbox("Choose numeric feature", [""] + numeric_cols)
         if numeric_choice:
             series = df[numeric_choice].dropna()
-            counts = series.groupby(pd.cut(series, bins=20)).size()
-            st.bar_chart(counts)
+            counts = (
+                series.groupby(pd.cut(series, bins=20))
+                .size()
+                .rename_axis("bucket")
+                .reset_index(name="count")
+            )
+            counts["bucket"] = counts["bucket"].astype(str)
+            st.bar_chart(counts, x="bucket", y="count")
 
         st.subheader("Categorical feature counts")
         categorical_choice = st.selectbox(
             "Choose categorical feature", [""] + categorical_cols
         )
         if categorical_choice:
-            value_counts = (
-                df[categorical_choice].fillna("(missing)").value_counts().nlargest(50)
+            category_counts = (
+                df[categorical_choice]
+                .fillna("(missing)")
+                .value_counts()
+                .nlargest(50)
+                .rename_axis("category")
+                .reset_index(name="count")
             )
-            st.bar_chart(value_counts)
+            st.bar_chart(category_counts, x="category", y="count")
 
         if len(numeric_cols) >= 2:
             st.subheader("Correlation matrix")

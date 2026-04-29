@@ -749,7 +749,13 @@ Streamlit Community Cloud setup:
 3. Create a new app from the GitHub repository.
 4. Select branch `main`.
 5. Set the main file path to `streamlit_app.py`.
-6. Deploy the app.
+6. Open Advanced settings and choose Python 3.12.
+7. Deploy the app.
+
+If an existing Streamlit Cloud app is already running on a different Python
+version, delete and redeploy the app with Python 3.12 selected in Advanced
+settings. Streamlit Community Cloud does not use `runtime.txt` for Python
+version selection.
 
 After the app exists, Streamlit Cloud redeploys automatically when GitHub
 receives new commits. Because the GitHub Actions workflow commits the retrained
