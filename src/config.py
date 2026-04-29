@@ -34,7 +34,7 @@ class RuntimeConfig:
             positive_target_label="Yes",
             negative_target_label="No",
             mlflow_experiment_name="churn_prediction",
-            prediction_threshold=0.5,
+            prediction_threshold=0.7,
         )
 
     def load_dataset(self, path: Path | None = None) -> pd.DataFrame:
