@@ -4,6 +4,8 @@ import pandas as pd
 import streamlit as st
 from pandas.api.types import is_integer_dtype, is_numeric_dtype
 
+from app.data_analysis import DataAnalysisRenderer
+from app.training_methodology import TrainingMethodologyRenderer
 from src.config import RUNTIME_CONFIG, RuntimeConfig
 from src.predict import ChurnPrediction, ChurnPredictor
 from src.preprocessing import DataPreprocessor
@@ -50,6 +52,8 @@ class DashboardRenderer:
         self.prediction_service = prediction_service or LocalPredictionService(
             config=config
         )
+        self.data_analysis_renderer = DataAnalysisRenderer(config)
+        self.training_methodology_renderer = TrainingMethodologyRenderer(config)
         self.config = config
 
     @st.cache_data
@@ -122,62 +126,19 @@ class DashboardRenderer:
         st.progress(float(result.churn_probability))
         st.json(result.to_dict())
 
-    def render_data_explorer(self, df: pd.DataFrame, feature_df: pd.DataFrame) -> None:
-        st.header("Data Explorer")
-        left, right = st.columns(2)
-        left.metric("Rows", len(df))
-        right.metric("Features", feature_df.shape[1])
+    def render_prediction_tab(self, feature_df: pd.DataFrame) -> None:
+        with st.form("prediction_form"):
+            payload = self.render_feature_inputs(feature_df)
+            submitted = st.form_submit_button("Predict churn risk")
 
-        if self.config.target_column in df.columns:
-            st.subheader("Target distribution")
-            target_counts = (
-                df[self.config.target_column]
-                .value_counts()
-                .rename_axis("target")
-                .reset_index(name="count")
-            )
-            st.bar_chart(target_counts, x="target", y="count")
-
-        st.subheader("Preview")
-        st.dataframe(df.head())
-
-        st.subheader("Summary statistics")
-        st.write(df.describe(include="all"))
-
-        numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
-        categorical_cols = df.select_dtypes(exclude=["number"]).columns.tolist()
-
-        st.subheader("Numeric feature distributions")
-        numeric_choice = st.selectbox("Choose numeric feature", [""] + numeric_cols)
-        if numeric_choice:
-            series = df[numeric_choice].dropna()
-            counts = (
-                series.groupby(pd.cut(series, bins=20))
-                .size()
-                .rename_axis("bucket")
-                .reset_index(name="count")
-            )
-            counts["bucket"] = counts["bucket"].astype(str)
-            st.bar_chart(counts, x="bucket", y="count")
-
-        st.subheader("Categorical feature counts")
-        categorical_choice = st.selectbox(
-            "Choose categorical feature", [""] + categorical_cols
-        )
-        if categorical_choice:
-            category_counts = (
-                df[categorical_choice]
-                .fillna("(missing)")
-                .value_counts()
-                .nlargest(50)
-                .rename_axis("category")
-                .reset_index(name="count")
-            )
-            st.bar_chart(category_counts, x="category", y="count")
-
-        if len(numeric_cols) >= 2:
-            st.subheader("Correlation matrix")
-            st.dataframe(df[numeric_cols].corr())
+        if submitted:
+            try:
+                start = time.time()
+                result = self.prediction_service.predict(payload)
+            except Exception as exc:
+                st.error(f"Prediction failed: {exc}")
+            else:
+                self.render_prediction_result(result, time.time() - start)
 
     def render(self) -> None:
         st.set_page_config(page_title="Customer Churn Dashboard", layout="wide")
@@ -200,20 +161,16 @@ class DashboardRenderer:
             f"features from `{self.config.data_path.name}`."
         )
 
-        with st.form("prediction_form"):
-            payload = self.render_feature_inputs(feature_df)
-            submitted = st.form_submit_button("Predict churn risk")
+        prediction_tab, analysis_tab, methodology_tab = st.tabs(
+            ["Predict", "Data Analysis", "Training Methodology"]
+        )
 
-        if submitted:
-            try:
-                start = time.time()
-                result = self.prediction_service.predict(payload)
-            except Exception as exc:
-                st.error(f"Prediction failed: {exc}")
-            else:
-                self.render_prediction_result(result, time.time() - start)
-
-        self.render_data_explorer(df, feature_df)
+        with prediction_tab:
+            self.render_prediction_tab(feature_df)
+        with analysis_tab:
+            self.data_analysis_renderer.render(df, feature_df)
+        with methodology_tab:
+            self.training_methodology_renderer.render()
 
 
 def main() -> None:
