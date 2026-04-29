@@ -1,223 +1,684 @@
-# Customer Churn Prediction App
+# Customer Churn Prediction
 
-This repository is now organized as a single-service Streamlit application that loads a trained churn model and runs predictions directly inside the app process. It is designed to be easy to run locally, easy to retrain, and easy to deploy on Streamlit Community Cloud from GitHub.
+## Overview
 
-## What this project does
+This repository contains an end-to-end customer churn prediction system. It
+includes data preprocessing, model training, experiment tracking, model artifact
+persistence, local prediction, and a Streamlit dashboard for interactive scoring
+and dataset exploration.
 
-Given a customer record, the app predicts the probability of churn and returns:
+The runtime application is intentionally simple: Streamlit loads a trained model
+artifact and performs prediction in-process. Training remains a separate offline
+workflow.
 
-- the churn probability
-- a binary label
-- the final class name: `Yes` or `No`
+```text
+raw customer data
+  -> preprocessing
+  -> train/test split
+  -> feature transformation
+  -> class balancing
+  -> model training
+  -> evaluation
+  -> artifact persistence
+  -> Streamlit prediction
+```
 
-The repository still includes local training code, preprocessing logic, and model persistence, but the deployed app no longer depends on FastAPI, Celery, or Redis.
+## Problem Definition
 
-## Current architecture
+Customer churn refers to a customer leaving, canceling, or stopping use of a
+service. The system predicts whether a customer is likely to churn from customer
+profile, service, billing, and usage features.
 
-The application now has two clear modes:
+The machine learning task is supervised binary classification:
 
-1. Training mode
-   Uses the dataset, preprocessing pipeline, SMOTE, XGBoost, and MLflow logging.
+- supervised: historical rows include the known target value
+- binary: the target has two possible labels, `Yes` and `No`
+- classification: the final output is a class label
 
-2. App mode
-   Loads the saved model bundle and performs direct in-process prediction inside Streamlit.
+The model also produces a churn probability. The probability is converted into a
+final label using a configurable threshold.
 
-This is the structure:
+```text
+probability >= 0.5 -> Yes
+probability < 0.5  -> No
+```
+
+## Repository Layout
 
 ```text
 .
 |-- app/
-|   |-- app.py                 # Streamlit UI renderer and local prediction flow
+|   `-- app.py                    # Streamlit UI and app-facing services
 |-- data/
-|   |-- data.csv               # Dataset
-|   |-- README.md
+|   |-- data.csv                  # Historical customer dataset
+|   `-- README.md                 # Dataset placement note
 |-- models/
-|   |-- model.joblib           # Saved trained model artifact
+|   `-- model.joblib              # Trained model artifact
+|-- notebooks/
+|   `-- train_churn_model.ipynb   # Step-by-step training notebook
 |-- src/
-|   |-- config.py              # Central runtime configuration object
-|   |-- model_bundle.py        # Saved model artifact structure
-|   |-- predict.py             # Local predictor service
-|   |-- preprocessing.py       # Data cleaning and feature preparation
-|   |-- train.py               # Model training service
-|-- .github/workflows/ci.yml   # Syntax-level CI check
-|-- docker-compose.yml         # Single Streamlit service for local containers
-|-- Dockerfile.streamlit
-|-- requirements.txt           # Lean runtime dependencies for the deployed app
-|-- requirements-train.txt     # Extra dependencies needed for retraining
-`-- streamlit_app.py           # Root Streamlit entrypoint for deployment
+|   |-- config.py                 # Runtime settings
+|   |-- model_bundle.py           # Model artifact contract and persistence
+|   |-- predict.py                # Prediction services
+|   |-- preprocessing.py          # Cleaning and feature preparation
+|   `-- train.py                  # Offline training workflow
+|-- docker-compose.yml            # Local container orchestration
+|-- Dockerfile.streamlit          # Streamlit runtime image
+|-- requirements.txt              # Runtime dependencies
+|-- requirements-train.txt        # Training and notebook dependencies
+`-- streamlit_app.py              # Streamlit entrypoint
 ```
 
-## Object-oriented structure
+## Runtime Architecture
 
-The project was refactored to use small service classes instead of scattered procedural logic.
+The project follows a small service-oriented object model. Each class owns a
+single responsibility and receives its dependencies explicitly where practical.
 
-### `src/config.py`
+| Component | File | Responsibility |
+| --- | --- | --- |
+| `RuntimeConfig` | `src/config.py` | Central paths, labels, threshold, and MLflow settings |
+| `DataPreprocessor` | `src/preprocessing.py` | Data cleaning, schema inference, target encoding, defaults |
+| `FeatureSchema` | `src/preprocessing.py` | Numeric and categorical feature groups |
+| `FeatureDefaults` | `src/preprocessing.py` | Prediction-time fallback values |
+| `TrainingSettings` | `src/train.py` | Train/test split, CV folds, scoring, and hyperparameter grid |
+| `TrainingMetrics` | `src/train.py` | Cross-validation and test metrics |
+| `MLflowTrainingTracker` | `src/train.py` | Experiment tracking through MLflow |
+| `ChurnModelTrainer` | `src/train.py` | End-to-end training orchestration |
+| `ModelArtifact` | `src/model_bundle.py` | Serializable model artifact structure |
+| `ModelArtifactRepository` | `src/model_bundle.py` | Artifact load/save through `joblib` |
+| `FeaturePayloadBuilder` | `src/predict.py` | Payload alignment and missing-value fallback |
+| `ChurnPredictor` | `src/predict.py` | Artifact-backed prediction service |
+| `ChurnPrediction` | `src/predict.py` | Prediction response object |
+| `ReferenceDataService` | `app/app.py` | Cleaned dataset loading for UI reference data |
+| `LocalPredictionService` | `app/app.py` | Streamlit-facing prediction wrapper |
+| `DashboardRenderer` | `app/app.py` | Streamlit layout, controls, and visual output |
 
-Contains `RuntimeConfig`, which owns:
+### Design Rationale
 
-- project paths
-- data path
-- model path
-- MLflow directory
-- target labels
-- prediction threshold
+The design separates responsibilities that change for different reasons:
 
-`RUNTIME_CONFIG` is the shared application configuration object used across the repo.
+- model training can change without changing the Streamlit renderer
+- preprocessing rules can evolve independently from model persistence
+- artifact storage is isolated in a repository class
+- prediction payload alignment is isolated from the UI
+- training settings are grouped in a dedicated configuration object
+- MLflow logic is kept outside core model-building methods
 
-### `src/preprocessing.py`
+This structure keeps the project easier to test, debug, extend, and deploy.
 
-Contains:
-
-- `DataPreprocessor`
-- `FeatureSchema`
-- `FeatureDefaults`
-
-Responsibilities:
-
-- normalize string/object columns
-- convert numeric-looking text to real numeric types
-- remove the ID column
-- drop missing rows
-- infer numeric and categorical feature groups
-- encode the target column
-- derive default fallback values for prediction-time payload filling
-
-### `src/model_bundle.py`
-
-Contains `ModelArtifact`, which defines the saved model structure.
-
-It stores:
-
-- the fitted pipeline
-- feature column order
-- numeric defaults
-- categorical defaults
-
-It also supports the legacy saved format in case older model bundles still exist.
-
-### `src/train.py`
-
-Contains:
-
-- `TrainingMetrics`
-- `ChurnModelTrainer`
-
-Responsibilities:
-
-- load and clean data
-- split train/test sets
-- build the full modeling pipeline
-- run `GridSearchCV`
-- log metrics to MLflow
-- save the final model artifact
-
-### `src/predict.py`
-
-Contains:
-
-- `FeaturePayloadBuilder`
-- `LegacyPredictorAdapter`
-- `ChurnPredictor`
-
-Responsibilities:
-
-- load the saved artifact lazily
-- align input payloads to training schema
-- fill missing fields from saved defaults
-- run probability prediction
-
-### `app/app.py`
-
-Contains:
-
-- `PredictionResult`
-- `ReferenceDataService`
-- `LocalPredictionService`
-- `DashboardRenderer`
-
-Responsibilities:
-
-- load dataset preview data
-- render the feature input form from the real schema
-- run prediction directly in process
-- display model output and data exploration views
-
-## Dataset expectations
+## Data Contract
 
 Default dataset path:
 
-`data/data.csv`
+```text
+data/data.csv
+```
 
-Current target configuration:
+Required target column:
 
-- Target column: `Churn`
-- Positive label: `Yes`
-- Negative label: `No`
-- ID column removed before training: `customerID`
+```text
+Churn
+```
 
-The current dataset contains 33 raw columns and is cleaned down to the feature set used for modeling.
+Configured target labels:
 
-## Preprocessing behavior
+```text
+positive label: Yes
+negative label: No
+```
 
-The preprocessing layer does a few important things:
+Configured ID column:
 
-1. Strips whitespace from column names.
-2. Trims string values.
-3. Converts blank strings to missing values.
-4. Detects numeric-looking object columns and converts them.
-5. Drops missing rows.
-6. Removes the ID column.
-7. Splits features into numeric and categorical groups automatically.
+```text
+customerID
+```
 
-This matters because fields like `TotalRevenue` may arrive as text in the raw CSV and should be treated as numeric features.
+The ID column is removed before training because it identifies rows rather than
+representing customer behavior. Identifier columns can encourage memorization or
+spurious patterns and should generally not be used as predictive features.
 
-## Training pipeline
+## Configuration
 
-Training still happens locally through `src/train.py`.
+Configuration is centralized in `src/config.py`.
 
-The model pipeline is:
+```python
+RUNTIME_CONFIG = RuntimeConfig.from_project_root(...)
+```
 
-`ColumnTransformer -> SMOTE -> XGBClassifier`
+`RuntimeConfig` stores:
 
-Hyperparameter search currently covers:
+- project root
+- dataset path
+- model artifact path
+- MLflow tracking directory
+- target column
+- ID column
+- positive and negative target labels
+- MLflow experiment name
+- prediction threshold
 
-- `n_estimators`: `100`, `200`
-- `max_depth`: `4`, `6`
-- `learning_rate`: `0.01`, `0.05`
+Centralized configuration avoids scattered constants and keeps dataset, artifact,
+and label changes localized.
 
-Training logs metrics to MLflow and saves the final artifact to:
+## Preprocessing
 
-`models/model.joblib`
+Preprocessing is implemented by `DataPreprocessor` in `src/preprocessing.py`.
 
-## Verified training result
+### Cleaning Behavior
 
-The current training flow was re-run successfully after the refactor and produced:
+`DataPreprocessor.clean` performs the following operations:
 
-- Best CV ROC AUC: `0.9598`
-- Test ROC AUC: `0.9676`
-- Test Accuracy: `0.9429`
+1. Copies the input dataframe.
+2. Strips whitespace from column names.
+3. Normalizes object/string columns.
+4. Strips whitespace from string values.
+5. Converts blank strings to missing values.
+6. Converts numeric-looking text columns to numeric dtype.
+7. Drops rows with missing values.
+8. Removes the configured ID column.
 
-## App behavior
+### Numeric-Looking Text Conversion
 
-The deployed Streamlit app no longer sends requests to a backend service.
+CSV files can store numeric values as strings. The preprocessor attempts numeric
+conversion for object/string columns and converts a column when at least 95% of
+non-missing values are numeric.
 
-Instead, it:
+```python
+NUMERIC_CONVERSION_THRESHOLD = 0.95
+```
 
-1. loads `models/model.joblib`
-2. builds a form from the cleaned dataset schema
-3. predicts directly using `ChurnPredictor`
-4. shows:
-   - predicted class
-   - churn probability
-   - latency
-   - raw JSON output
-5. keeps the data explorer for preview, summary stats, distributions, and correlation view
+The threshold permits small amounts of noisy raw data while still recovering
+columns that should be numeric.
 
-That makes deployment much easier because there is only one process to host.
+### Missing Rows
 
-## Local setup
+Rows with missing values are currently dropped with `dropna()`. This keeps the
+training workflow simple and deterministic. A production workflow with heavier
+missingness could replace this with explicit imputation.
 
-### Run the app locally
+## Feature Schema
+
+`DataPreprocessor.infer_schema` separates input features into:
+
+- numeric features
+- categorical features
+
+Numeric columns are detected with pandas dtype checks. Categorical columns are
+all remaining non-numeric columns.
+
+The inferred schema is stored in `FeatureSchema`:
+
+```python
+FeatureSchema(
+    numeric_columns=[...],
+    categorical_columns=[...],
+)
+```
+
+## Target Encoding
+
+The target column is converted from text labels into numeric classes:
+
+```text
+No  -> 0
+Yes -> 1
+```
+
+This mapping is performed by `DataPreprocessor.encode_target`.
+
+The method validates the target values and raises an error if unexpected labels
+are present. This prevents silent training on malformed targets.
+
+## Feature Transformation
+
+Feature transformation is handled through a scikit-learn `ColumnTransformer`.
+
+```text
+numeric columns     -> StandardScaler
+categorical columns -> OneHotEncoder
+```
+
+### StandardScaler
+
+`StandardScaler` normalizes numeric features by subtracting the mean and dividing
+by the standard deviation.
+
+```text
+scaled_value = (value - mean) / standard_deviation
+```
+
+Tree-based models such as XGBoost do not strictly require scaling, but keeping
+numeric preprocessing explicit makes the pipeline consistent and easier to
+extend.
+
+### OneHotEncoder
+
+`OneHotEncoder` converts categorical values into binary indicator columns.
+
+Example:
+
+```text
+Contract = Month-to-month
+Contract = One year
+Contract = Two year
+```
+
+becomes:
+
+```text
+Contract_Month-to-month  Contract_One year  Contract_Two year
+1                        0                  0
+0                        1                  0
+0                        0                  1
+```
+
+The encoder is configured with:
+
+```python
+OneHotEncoder(handle_unknown="ignore")
+```
+
+This prevents prediction failures when app-time input contains a category not
+seen during training.
+
+## Train/Test Split
+
+Training uses an 80/20 split:
+
+```python
+test_size = 0.2
+```
+
+The split is stratified:
+
+```python
+stratify=target
+```
+
+Stratification preserves the churn/non-churn ratio across train and test sets.
+This matters for classification problems where one class may be more common than
+the other.
+
+The random seed is controlled by `TrainingSettings.random_state` for repeatable
+splits and model behavior.
+
+## Class Imbalance
+
+Churn datasets commonly contain more non-churn customers than churn customers.
+This can make accuracy misleading. For example, if most customers do not churn,
+a model can achieve high accuracy by overpredicting the majority class.
+
+The project uses SMOTE to reduce this issue.
+
+## SMOTE
+
+SMOTE stands for Synthetic Minority Over-sampling Technique.
+
+It creates synthetic examples of the minority class during training. In this
+project, that usually means creating additional churn-like examples.
+
+SMOTE is placed inside the imbalanced-learn pipeline:
+
+```text
+ColumnTransformer -> SMOTE -> XGBClassifier
+```
+
+This placement is important because cross-validation must apply SMOTE only to
+training folds. The final test set must remain untouched to preserve an honest
+evaluation.
+
+## Model
+
+The classifier is:
+
+```python
+XGBClassifier
+```
+
+XGBoost is a gradient boosted decision tree model. A decision tree learns rules
+such as:
+
+```text
+Is tenure low?
+Is the contract month-to-month?
+Are customer service calls high?
+```
+
+Gradient boosting trains many trees sequentially. Each new tree focuses on
+correcting previous errors. XGBoost is commonly effective for structured tabular
+datasets.
+
+Current model settings include:
+
+```python
+XGBClassifier(
+    tree_method="hist",
+    eval_metric="logloss",
+    random_state=settings.random_state,
+)
+```
+
+## Training Pipeline
+
+The full pipeline is:
+
+```text
+ColumnTransformer -> SMOTE -> XGBClassifier
+```
+
+The implementation uses `imblearn.pipeline.Pipeline` because SMOTE changes the
+number of rows during training. A plain scikit-learn pipeline is not appropriate
+for samplers.
+
+Pipeline benefits:
+
+- one fitted object contains preprocessing and model steps
+- cross-validation applies preprocessing correctly per fold
+- SMOTE is applied only during training
+- prediction uses the same transformations as training
+- the entire workflow can be saved as one artifact
+
+## Hyperparameter Search
+
+Hyperparameters are model settings selected before training. The project uses
+`GridSearchCV` to evaluate combinations of:
+
+- `n_estimators`
+- `max_depth`
+- `learning_rate`
+
+Current grid:
+
+```python
+{
+    "model__n_estimators": [100, 200],
+    "model__max_depth": [4, 6],
+    "model__learning_rate": [0.01, 0.05],
+}
+```
+
+The `model__` prefix addresses the `model` step inside the pipeline.
+
+## Cross-Validation
+
+Training uses 3-fold cross-validation:
+
+```python
+cv_folds = 3
+```
+
+Each hyperparameter combination is evaluated across multiple validation folds.
+This gives a more stable model-selection signal than a single split.
+
+The scoring metric is:
+
+```python
+scoring = "roc_auc"
+```
+
+ROC AUC is appropriate for churn classification because it evaluates probability
+ranking and is more informative than accuracy alone for imbalanced data.
+
+## Evaluation Metrics
+
+The project reports several metrics.
+
+### ROC AUC
+
+ROC AUC measures how well the model ranks positive examples above negative
+examples.
+
+Interpretation:
+
+- `0.5`: random ranking
+- `1.0`: perfect ranking
+- higher is better
+
+### Accuracy
+
+Accuracy measures the fraction of final class predictions that are correct.
+
+Accuracy is intuitive but can be misleading when class distribution is
+imbalanced.
+
+### Precision
+
+Precision answers:
+
+```text
+When churn is predicted, how often is that prediction correct?
+```
+
+Higher precision means fewer false churn alerts.
+
+### Recall
+
+Recall answers:
+
+```text
+Out of all actual churn customers, how many were found?
+```
+
+Higher recall means fewer missed churn customers.
+
+### F1 Score
+
+F1 combines precision and recall into one score. It is useful when both false
+positives and false negatives matter.
+
+### Confusion Matrix
+
+A confusion matrix shows:
+
+- true negatives
+- false positives
+- false negatives
+- true positives
+
+It is useful for understanding the type of errors being made.
+
+## Prediction Threshold
+
+The model returns a probability. The threshold converts probability into the
+final label.
+
+Default threshold:
+
+```python
+prediction_threshold = 0.5
+```
+
+Tradeoff:
+
+- lower threshold: higher recall, more false positives
+- higher threshold: higher precision, more false negatives
+
+Threshold selection should be based on business cost. If missing churn is more
+expensive than a false alert, a lower threshold may be appropriate. If outreach
+cost is high, a higher threshold may be better.
+
+## Feature Defaults
+
+The app can receive incomplete or invalid payloads. Training stores fallback
+values for each feature:
+
+- numeric feature default: median
+- categorical feature default: mode
+
+Median is less sensitive to outliers than mean. Mode is the most common
+categorical value.
+
+These defaults are saved inside the model artifact and used by
+`FeaturePayloadBuilder`.
+
+## Model Artifact
+
+The trained artifact is stored at:
+
+```text
+models/model.joblib
+```
+
+The artifact is represented by `ModelArtifact` and persisted by
+`ModelArtifactRepository`.
+
+Artifact contents:
+
+- artifact version
+- fitted preprocessing/model pipeline
+- feature column order
+- numeric defaults
+- categorical defaults
+- target column metadata
+- positive and negative label metadata
+- prediction threshold
+
+The project supports only the current unified artifact format. Older split
+artifacts are intentionally unsupported.
+
+### Artifact Contract
+
+The artifact payload must contain a `pipeline` key.
+
+```python
+{
+    "artifact_version": 2,
+    "pipeline": fitted_pipeline,
+    "feature_columns": [...],
+    "numeric_defaults": {...},
+    "categorical_defaults": {...},
+    "target_column": "Churn",
+    "positive_target_label": "Yes",
+    "negative_target_label": "No",
+    "prediction_threshold": 0.5,
+}
+```
+
+Because the artifact is a serialized Python pipeline, compatible dependency
+versions are important. Runtime dependencies are pinned in `requirements.txt`.
+
+## Prediction Flow
+
+Prediction is implemented in `src/predict.py`.
+
+Flow:
+
+1. `ChurnPredictor` loads `models/model.joblib`.
+2. `ModelArtifactRepository` deserializes the artifact.
+3. `FeaturePayloadBuilder` creates a one-row dataframe.
+4. Payload columns are ordered according to the training feature list.
+5. Missing or invalid values are replaced with saved defaults.
+6. The saved pipeline runs `predict_proba`.
+7. `ChurnPrediction` returns probability, numeric label, and text label.
+
+Column order is part of the prediction contract. App-time input must be aligned
+to the same feature structure used during training.
+
+## Streamlit Application
+
+The Streamlit app is implemented in `app/app.py` and launched through
+`streamlit_app.py`.
+
+Runtime responsibilities:
+
+- load cleaned reference data
+- build feature input widgets from the dataset schema
+- call the local prediction service
+- display prediction result
+- display dataset exploration views
+
+The Streamlit app does not train the model. It requires a saved artifact for
+prediction.
+
+If `models/model.joblib` is missing, run training before using prediction:
+
+```bash
+python -m src.train
+```
+
+## Training Workflow
+
+Run training from the repository root:
+
+```bash
+python -m src.train
+```
+
+Training performs:
+
+1. runtime directory creation
+2. dataset loading
+3. preprocessing
+4. target encoding
+5. stratified train/test split
+6. pipeline creation
+7. grid search with cross-validation
+8. test-set evaluation
+9. MLflow metric logging
+10. artifact persistence to `models/model.joblib`
+
+Current verified metrics after retraining:
+
+```text
+Best CV ROC AUC: 0.9597857798498137
+Test ROC AUC:    0.9675864692986429
+Test Accuracy:   0.9429429429429429
+```
+
+## Notebook Workflow
+
+The notebook is located at:
+
+```text
+notebooks/train_churn_model.ipynb
+```
+
+The notebook mirrors the training workflow in smaller inspectable steps:
+
+- data loading
+- target inspection
+- cleaning
+- feature schema inference
+- train/test split
+- transformer creation
+- pipeline creation
+- grid search
+- hyperparameter comparison
+- test evaluation
+- confusion matrix and classification metrics
+- threshold comparison
+- feature importance
+- prediction defaults
+- artifact saving
+- artifact reload verification
+- sample prediction
+- optional SHAP explanation
+
+## Dependencies
+
+Runtime dependencies are pinned in:
+
+```text
+requirements.txt
+```
+
+Training and notebook dependencies are defined in:
+
+```text
+requirements-train.txt
+```
+
+`requirements-train.txt` includes runtime dependencies and adds:
+
+- `mlflow`
+- `openpyxl`
+- `shap`
+- `notebook`
+
+Python 3.12 is used by the Docker runtime and is the recommended local runtime
+for artifact compatibility.
+
+## Local Setup
 
 Install runtime dependencies:
 
@@ -225,111 +686,118 @@ Install runtime dependencies:
 pip install -r requirements.txt
 ```
 
-Start the app from the repository root:
-
-```bash
-streamlit run streamlit_app.py
-```
-
-### Retrain the model locally
-
 Install training dependencies:
 
 ```bash
 pip install -r requirements-train.txt
 ```
 
-Run training:
+Run the app:
 
 ```bash
-python -m src.train
+streamlit run streamlit_app.py
+```
+
+Open the URL printed by Streamlit, usually:
+
+```text
+http://localhost:8501
 ```
 
 ## Docker
 
-This repo now includes a single-service Docker setup for the Streamlit app.
-
-Start it with:
+Build and run the Streamlit service:
 
 ```bash
 docker-compose up --build
 ```
 
-Then open:
+Open:
 
-`http://localhost:8501`
+```text
+http://localhost:8501
+```
 
-## Streamlit Community Cloud deployment
+The Docker image installs `requirements.txt` and runs the Streamlit entrypoint.
+It is designed for serving the app, not for model experimentation.
 
-This repository is now shaped specifically to deploy cleanly on Streamlit Community Cloud.
+## Deployment
 
-Important deployment files:
+The repository is shaped for Streamlit Community Cloud deployment.
+
+Deployment settings:
 
 - entrypoint: `streamlit_app.py`
 - dependency file: `requirements.txt`
-- model artifact: `models/model.joblib`
+- required artifact: `models/model.joblib`
+- Python version: 3.12
 
-### Deploy steps
+Automated training:
+
+- `.github/workflows/ci.yml` runs on every push to `main`
+- the workflow installs `requirements-train.txt`
+- it runs `python -m src.train`
+- if training changes `models/model.joblib`, GitHub Actions commits the updated
+  artifact back to the branch
+- pushes that only update `models/model.joblib` are ignored to avoid a training
+  loop
+
+Streamlit Community Cloud setup:
 
 1. Push this repository to GitHub.
-2. Sign in to Streamlit Community Cloud.
-3. Click `Create app`.
-4. Select your GitHub repository.
-5. Set the entrypoint file to `streamlit_app.py`.
-6. Deploy.
+2. Open Streamlit Community Cloud.
+3. Create a new app from the GitHub repository.
+4. Select branch `main`.
+5. Set the main file path to `streamlit_app.py`.
+6. Deploy the app.
 
-That is enough for this version of the project because prediction now happens directly inside Streamlit.
+After the app exists, Streamlit Cloud redeploys automatically when GitHub
+receives new commits. Because the GitHub Actions workflow commits the retrained
+`models/model.joblib` artifact after each source push, the deployed app receives
+the latest trained model on the next Streamlit Cloud redeploy.
 
-## Why this deploys better than the old version
+GitHub Pages is not suitable because this project requires Python execution.
 
-The previous architecture needed:
+## Runtime Simplification
 
-- a FastAPI service
-- a Celery worker
-- Redis
-- task polling between UI and backend
+The app does not use FastAPI, Celery, or Redis.
 
-That stack is workable locally, but it is more fragile on free hosting.
+Those components are useful in larger distributed systems, but this project does
+not require them because prediction is fast enough to run inside the Streamlit
+process.
 
-The current version avoids all of that at runtime:
+Benefits of the current runtime:
 
-- no internal network calls
-- no queue
-- no separate worker process
-- no Redis dependency
+- one app process
+- no internal HTTP dependency
+- no task queue
+- no worker service
+- simpler free hosting path
 
-This is much more suitable for Streamlit Community Cloud.
+## Operational Notes
 
-## Dependency split
+- `models/model.joblib` must exist before app prediction is available.
+- `mlruns/` stores local MLflow experiment data and is ignored by Git.
+- `data/*.xlsx` is ignored by Git; `data/data.csv` is the expected dataset.
+- The saved model artifact depends on compatible versions of sklearn, XGBoost,
+  imbalanced-learn, numpy, pandas, and joblib.
+- The current MLflow filesystem backend may emit a deprecation warning in newer
+  MLflow versions. The warning is non-fatal for local use.
+- For a production MLflow setup, use SQLite or a tracking server instead of the
+  local filesystem backend.
 
-There are now two dependency files on purpose.
+## Project Contract
 
-### `requirements.txt`
+The current implementation assumes:
 
-Used for the deployed Streamlit app and lean local runtime.
+- Python 3.12 runtime
+- dataset path: `data/data.csv`
+- target column: `Churn`
+- ID column: `customerID`
+- positive label: `Yes`
+- negative label: `No`
+- model artifact path: `models/model.joblib`
+- artifact format: unified payload with a `pipeline` key
 
-### `requirements-train.txt`
-
-Used when you want to retrain the model locally. It extends runtime dependencies and adds:
-
-- `mlflow`
-- `openpyxl`
-- `shap`
-
-This keeps Streamlit deployment lighter while preserving your training workflow.
-
-## CI
-
-The GitHub Actions workflow still performs a syntax-level compile check over tracked Python files.
-
-## Free hosting note
-
-GitHub is a great place to store the code, but GitHub Pages is not suitable for this app because GitHub Pages only hosts static sites.
-
-For this repo, the best free hosting option is Streamlit Community Cloud because it is built for Python Streamlit apps and deploys directly from GitHub.
-
-## What still requires your account
-
-I can refactor and prepare the repo, but I cannot complete the final Streamlit Community Cloud deployment from here unless you provide access through your own GitHub and Streamlit accounts.
-
-The codebase is now prepared for that final step.
+Changing any of these assumptions requires updating `RuntimeConfig` and
+retraining the model.

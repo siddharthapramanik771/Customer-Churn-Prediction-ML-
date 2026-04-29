@@ -1,25 +1,45 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
+import sys
+from typing import Any
 
-import joblib
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import mlflow
+import pandas as pd
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline
 from sklearn.metrics import accuracy_score, roc_auc_score
 from sklearn.model_selection import GridSearchCV, train_test_split
 from xgboost import XGBClassifier
 
-from src.config import (
-    RUNTIME_CONFIG,
-)
-from src.model_bundle import ModelArtifact
+from src.config import RUNTIME_CONFIG, RuntimeConfig
+from src.model_bundle import ModelArtifact, ModelArtifactRepository
 from src.preprocessing import (
-    DEFAULT_PREPROCESSOR,
     DataPreprocessor,
+    FeatureDefaults,
+    FeatureSchema,
 )
 
 
-RANDOM_STATE = 42
-GRID_SEARCH_JOBS = 1
+@dataclass(frozen=True)
+class TrainingSettings:
+    """Settings that control reproducibility, validation, and search behavior."""
+
+    random_state: int = 42
+    test_size: float = 0.2
+    cv_folds: int = 3
+    scoring: str = "roc_auc"
+    grid_search_jobs: int = 1
+    grid_search_verbose: int = 1
+    param_grid: dict[str, list[Any]] = field(
+        default_factory=lambda: {
+            "model__n_estimators": [100, 200],
+            "model__max_depth": [4, 6],
+            "model__learning_rate": [0.01, 0.05],
+        }
+    )
 
 
 @dataclass(frozen=True)
@@ -28,87 +48,71 @@ class TrainingMetrics:
     test_roc_auc: float
     test_accuracy: float
 
+    def to_dict(self) -> dict[str, float]:
+        return {
+            "cv_best_roc_auc": self.cv_best_roc_auc,
+            "test_roc_auc": self.test_roc_auc,
+            "test_accuracy": self.test_accuracy,
+        }
 
-class ChurnModelTrainer:
-    def __init__(self, config=RUNTIME_CONFIG, preprocessor: DataPreprocessor | None = None):
+
+class MLflowTrainingTracker:
+    """Small adapter around MLflow so tracking stays outside model logic."""
+
+    def __init__(self, config: RuntimeConfig = RUNTIME_CONFIG) -> None:
         self.config = config
-        self.preprocessor = preprocessor or DEFAULT_PREPROCESSOR
 
-    def configure_tracking(self) -> None:
+    def configure(self) -> None:
         self.config.ensure_runtime_dirs()
         mlflow.set_tracking_uri(self.config.mlflow_tracking_uri)
         mlflow.set_registry_uri(self.config.mlflow_tracking_uri)
         mlflow.set_experiment(self.config.mlflow_experiment_name)
 
-    def load_training_frame(self):
-        raw_df = self.config.load_dataset()
-        return self.preprocessor.clean(raw_df)
+    def log_run(
+        self,
+        *,
+        best_params: dict[str, Any],
+        metrics: TrainingMetrics,
+        schema: FeatureSchema,
+        feature_count: int,
+        artifact_path: str,
+    ) -> None:
+        mlflow.log_params(best_params)
+        mlflow.log_metrics(metrics.to_dict())
+        mlflow.log_param("feature_count", feature_count)
+        mlflow.log_param("numeric_feature_count", len(schema.numeric_columns))
+        mlflow.log_param("categorical_feature_count", len(schema.categorical_columns))
+        mlflow.log_artifact(artifact_path)
 
-    def split_training_data(self, df):
-        features = df.drop(self.config.target_column, axis=1)
-        target = self.preprocessor.encode_target(df[self.config.target_column])
-        return train_test_split(
-            features,
-            target,
-            test_size=0.2,
-            random_state=RANDOM_STATE,
-            stratify=target,
+
+class ChurnModelTrainer:
+    """Coordinates the end-to-end model training workflow."""
+
+    def __init__(
+        self,
+        config: RuntimeConfig = RUNTIME_CONFIG,
+        preprocessor: DataPreprocessor | None = None,
+        settings: TrainingSettings | None = None,
+        artifact_repository: ModelArtifactRepository | None = None,
+        tracker: MLflowTrainingTracker | None = None,
+    ) -> None:
+        self.config = config
+        self.preprocessor = preprocessor or DataPreprocessor.from_config(config)
+        self.settings = settings or TrainingSettings()
+        self.artifact_repository = artifact_repository or ModelArtifactRepository(
+            config.model_path
         )
-
-    def create_pipeline(self, feature_frame):
-        transformer, schema = self.preprocessor.build_preprocessor(feature_frame)
-        pipeline = Pipeline(
-            [
-                ("preprocessor", transformer),
-                ("smote", SMOTE(random_state=RANDOM_STATE)),
-                (
-                    "model",
-                    XGBClassifier(
-                        tree_method="hist",
-                        eval_metric="logloss",
-                        random_state=RANDOM_STATE,
-                    ),
-                ),
-            ]
-        )
-        return pipeline, schema
-
-    def get_param_grid(self):
-        return {
-            "model__n_estimators": [100, 200],
-            "model__max_depth": [4, 6],
-            "model__learning_rate": [0.01, 0.05],
-        }
-
-    def build_artifact(self, pipeline, feature_columns, feature_defaults) -> ModelArtifact:
-        return ModelArtifact(
-            pipeline=pipeline,
-            feature_columns=feature_columns,
-            numeric_defaults=feature_defaults.numeric_defaults,
-            categorical_defaults=feature_defaults.categorical_defaults,
-        )
-
-    def save_artifact(self, artifact: ModelArtifact) -> None:
-        joblib.dump(artifact.to_payload(), self.config.model_path)
-        mlflow.log_artifact(str(self.config.model_path))
+        self.tracker = tracker or MLflowTrainingTracker(config)
 
     def train(self) -> TrainingMetrics:
-        self.configure_tracking()
+        self.tracker.configure()
         df = self.load_training_frame()
         X_train, X_test, y_train, y_test = self.split_training_data(df)
         pipeline, schema = self.create_pipeline(X_train)
         feature_defaults = self.preprocessor.derive_feature_defaults(X_train)
 
         with mlflow.start_run():
-            grid = GridSearchCV(
-                pipeline,
-                self.get_param_grid(),
-                cv=3,
-                scoring="roc_auc",
-                n_jobs=GRID_SEARCH_JOBS,
-                verbose=1,
-                error_score="raise",
-            )
+            grid = self.create_grid_search(pipeline)
             grid.fit(X_train, y_train)
 
             best_pipeline = grid.best_estimator_
@@ -117,39 +121,118 @@ class ChurnModelTrainer:
                 test_probabilities >= self.config.prediction_threshold
             ).astype(int)
 
-            metrics = TrainingMetrics(
-                cv_best_roc_auc=grid.best_score_,
-                test_roc_auc=roc_auc_score(y_test, test_probabilities),
-                test_accuracy=accuracy_score(y_test, test_predictions),
+            metrics = self.evaluate(
+                grid.best_score_,
+                y_test,
+                test_probabilities,
+                test_predictions,
             )
-
-            mlflow.log_params(grid.best_params_)
-            mlflow.log_metric("cv_best_roc_auc", metrics.cv_best_roc_auc)
-            mlflow.log_metric("test_roc_auc", metrics.test_roc_auc)
-            mlflow.log_metric("test_accuracy", metrics.test_accuracy)
-            mlflow.log_param("feature_count", X_train.shape[1])
-            mlflow.log_param("numeric_feature_count", len(schema.numeric_columns))
-            mlflow.log_param(
-                "categorical_feature_count", len(schema.categorical_columns)
-            )
-
             artifact = self.build_artifact(
                 best_pipeline,
                 X_train.columns.tolist(),
                 feature_defaults,
             )
-            self.save_artifact(artifact)
+            self.artifact_repository.save(artifact)
+            self.tracker.log_run(
+                best_params=grid.best_params_,
+                metrics=metrics,
+                schema=schema,
+                feature_count=X_train.shape[1],
+                artifact_path=str(self.artifact_repository.model_path),
+            )
 
-        print("Saved model to", self.config.model_path)
+        self.print_summary(metrics)
+        return metrics
+
+    def load_training_frame(self) -> pd.DataFrame:
+        raw_df = self.config.load_dataset()
+        return self.preprocessor.clean(raw_df)
+
+    def split_training_data(
+        self, df: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+        features = df.drop(self.config.target_column, axis=1)
+        target = self.preprocessor.encode_target(df[self.config.target_column])
+        return train_test_split(
+            features,
+            target,
+            test_size=self.settings.test_size,
+            random_state=self.settings.random_state,
+            stratify=target,
+        )
+
+    def create_pipeline(
+        self, feature_frame: pd.DataFrame
+    ) -> tuple[Pipeline, FeatureSchema]:
+        transformer, schema = self.preprocessor.build_transformer(feature_frame)
+        pipeline = Pipeline(
+            [
+                ("preprocessor", transformer),
+                ("smote", SMOTE(random_state=self.settings.random_state)),
+                (
+                    "model",
+                    XGBClassifier(
+                        tree_method="hist",
+                        eval_metric="logloss",
+                        random_state=self.settings.random_state,
+                    ),
+                ),
+            ]
+        )
+        return pipeline, schema
+
+    def create_grid_search(self, pipeline: Pipeline) -> GridSearchCV:
+        return GridSearchCV(
+            pipeline,
+            self.settings.param_grid,
+            cv=self.settings.cv_folds,
+            scoring=self.settings.scoring,
+            n_jobs=self.settings.grid_search_jobs,
+            verbose=self.settings.grid_search_verbose,
+            error_score="raise",
+        )
+
+    def evaluate(
+        self,
+        cv_best_score: float,
+        y_test: pd.Series,
+        test_probabilities,
+        test_predictions,
+    ) -> TrainingMetrics:
+        return TrainingMetrics(
+            cv_best_roc_auc=cv_best_score,
+            test_roc_auc=roc_auc_score(y_test, test_probabilities),
+            test_accuracy=accuracy_score(y_test, test_predictions),
+        )
+
+    def build_artifact(
+        self,
+        pipeline: Pipeline,
+        feature_columns: list[str],
+        feature_defaults: FeatureDefaults,
+    ) -> ModelArtifact:
+        return ModelArtifact(
+            pipeline=pipeline,
+            feature_columns=feature_columns,
+            numeric_defaults=feature_defaults.numeric_defaults,
+            categorical_defaults=feature_defaults.categorical_defaults,
+            target_column=self.config.target_column,
+            positive_target_label=self.config.positive_target_label,
+            negative_target_label=self.config.negative_target_label,
+            prediction_threshold=self.config.prediction_threshold,
+        )
+
+    def print_summary(self, metrics: TrainingMetrics) -> None:
+        print("Saved model to", self.artifact_repository.model_path)
         print("Best CV ROC AUC:", metrics.cv_best_roc_auc)
         print("Test ROC AUC:", metrics.test_roc_auc)
         print("Test Accuracy:", metrics.test_accuracy)
-        return metrics
 
 
-def main():
+def main() -> None:
     trainer = ChurnModelTrainer()
     trainer.train()
+
 
 if __name__ == "__main__":
     main()

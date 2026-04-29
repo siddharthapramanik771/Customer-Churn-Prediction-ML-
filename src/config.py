@@ -6,6 +6,8 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class RuntimeConfig:
+    """Application settings shared by training, prediction, and the UI."""
+
     project_root: Path
     data_path: Path
     model_path: Path
@@ -16,8 +18,21 @@ class RuntimeConfig:
     negative_target_label: str
     mlflow_experiment_name: str
     prediction_threshold: float
-    celery_broker_url: str
-    celery_result_backend: str
+
+    @classmethod
+    def from_project_root(cls, project_root: Path) -> "RuntimeConfig":
+        return cls(
+            project_root=project_root,
+            data_path=project_root / "data" / "data.csv",
+            model_path=project_root / "models" / "model.joblib",
+            mlflow_tracking_dir=project_root / "mlruns",
+            target_column="Churn",
+            id_column="customerID",
+            positive_target_label="Yes",
+            negative_target_label="No",
+            mlflow_experiment_name="churn_prediction",
+            prediction_threshold=0.5,
+        )
 
     def load_dataset(self, path: Path | None = None) -> pd.DataFrame:
         dataset_path = path or self.data_path
@@ -40,42 +55,6 @@ class RuntimeConfig:
         return self.mlflow_tracking_dir.resolve().as_uri()
 
 
-RUNTIME_CONFIG = RuntimeConfig(
-    project_root=Path(__file__).resolve().parent.parent,
-    data_path=Path(__file__).resolve().parent.parent / "data" / "data.csv",
-    model_path=Path(__file__).resolve().parent.parent / "models" / "model.joblib",
-    mlflow_tracking_dir=Path(__file__).resolve().parent.parent / "mlruns",
-    target_column="Churn",
-    id_column="customerID",
-    positive_target_label="Yes",
-    negative_target_label="No",
-    mlflow_experiment_name="churn_prediction",
-    prediction_threshold=0.5,
-    celery_broker_url="redis://redis:6379/0",
-    celery_result_backend="redis://redis:6379/0",
+RUNTIME_CONFIG = RuntimeConfig.from_project_root(
+    Path(__file__).resolve().parent.parent
 )
-
-PROJECT_ROOT = RUNTIME_CONFIG.project_root
-DATA_PATH = RUNTIME_CONFIG.data_path
-MODEL_PATH = RUNTIME_CONFIG.model_path
-MLFLOW_TRACKING_DIR = RUNTIME_CONFIG.mlflow_tracking_dir
-TARGET_COLUMN = RUNTIME_CONFIG.target_column
-ID_COLUMN = RUNTIME_CONFIG.id_column
-POSITIVE_TARGET_LABEL = RUNTIME_CONFIG.positive_target_label
-NEGATIVE_TARGET_LABEL = RUNTIME_CONFIG.negative_target_label
-MLFLOW_EXPERIMENT_NAME = RUNTIME_CONFIG.mlflow_experiment_name
-PREDICTION_THRESHOLD = RUNTIME_CONFIG.prediction_threshold
-CELERY_BROKER_URL = RUNTIME_CONFIG.celery_broker_url
-CELERY_RESULT_BACKEND = RUNTIME_CONFIG.celery_result_backend
-
-
-def load_dataset(path: Path = DATA_PATH) -> pd.DataFrame:
-    return RUNTIME_CONFIG.load_dataset(path)
-
-
-def ensure_runtime_dirs() -> None:
-    RUNTIME_CONFIG.ensure_runtime_dirs()
-
-
-def get_mlflow_tracking_uri() -> str:
-    return RUNTIME_CONFIG.mlflow_tracking_uri

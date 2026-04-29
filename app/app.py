@@ -1,50 +1,40 @@
 import time
-from dataclasses import dataclass
 
 import pandas as pd
 import streamlit as st
 from pandas.api.types import is_integer_dtype, is_numeric_dtype
 
-from src.config import RUNTIME_CONFIG
-from src.predict import ChurnPredictor
-from src.preprocessing import DEFAULT_PREPROCESSOR
-
-
-@dataclass(frozen=True)
-class PredictionResult:
-    churn_probability: float
-    label: int
-    prediction: str
+from src.config import RUNTIME_CONFIG, RuntimeConfig
+from src.predict import ChurnPrediction, ChurnPredictor
+from src.preprocessing import DataPreprocessor
 
 
 class ReferenceDataService:
-    def __init__(self, config=RUNTIME_CONFIG) -> None:
+    def __init__(
+        self,
+        config: RuntimeConfig = RUNTIME_CONFIG,
+        preprocessor: DataPreprocessor | None = None,
+    ) -> None:
         self.config = config
+        self.preprocessor = preprocessor or DataPreprocessor.from_config(config)
 
     def load(self) -> pd.DataFrame | None:
         if not self.config.data_path.exists():
             return None
-        return DEFAULT_PREPROCESSOR.clean(self.config.load_dataset())
+        return self.preprocessor.clean(self.config.load_dataset())
 
 
 class LocalPredictionService:
     def __init__(
         self,
         predictor: ChurnPredictor | None = None,
-        config=RUNTIME_CONFIG,
+        config: RuntimeConfig = RUNTIME_CONFIG,
     ) -> None:
-        self.predictor = predictor or ChurnPredictor()
+        self.predictor = predictor or ChurnPredictor(config)
         self.config = config
 
-    def predict(self, payload: dict) -> PredictionResult:
-        probability = self.predictor.predict_probability(payload)
-        label = int(probability >= self.config.prediction_threshold)
-        prediction = (
-            self.config.positive_target_label
-            if label
-            else self.config.negative_target_label
-        )
-        return PredictionResult(probability, label, prediction)
+    def predict(self, payload: dict) -> ChurnPrediction:
+        return self.predictor.predict(payload)
 
 
 class DashboardRenderer:
@@ -52,9 +42,11 @@ class DashboardRenderer:
         self,
         reference_data_service: ReferenceDataService | None = None,
         prediction_service: LocalPredictionService | None = None,
-        config=RUNTIME_CONFIG,
+        config: RuntimeConfig = RUNTIME_CONFIG,
     ) -> None:
-        self.reference_data_service = reference_data_service or ReferenceDataService(config)
+        self.reference_data_service = reference_data_service or ReferenceDataService(
+            config
+        )
         self.prediction_service = prediction_service or LocalPredictionService(
             config=config
         )
@@ -76,7 +68,9 @@ class DashboardRenderer:
                 if is_numeric_dtype(series):
                     payload[column_name] = self.render_numeric_input(column_name, series)
                 else:
-                    payload[column_name] = self.render_categorical_input(column_name, series)
+                    payload[column_name] = self.render_categorical_input(
+                        column_name, series
+                    )
 
         return payload
 
@@ -118,7 +112,7 @@ class DashboardRenderer:
         return st.selectbox(column_name, options, index=default_index)
 
     @staticmethod
-    def render_prediction_result(result: PredictionResult, elapsed_seconds: float) -> None:
+    def render_prediction_result(result: ChurnPrediction, elapsed_seconds: float) -> None:
         st.success("Prediction complete")
         left, right, extra = st.columns(3)
         left.metric("Prediction", result.prediction)
@@ -126,13 +120,7 @@ class DashboardRenderer:
         extra.metric("Latency", f"{elapsed_seconds:.2f}s")
 
         st.progress(float(result.churn_probability))
-        st.json(
-            {
-                "churn_probability": result.churn_probability,
-                "label": result.label,
-                "prediction": result.prediction,
-            }
-        )
+        st.json(result.to_dict())
 
     def render_data_explorer(self, df: pd.DataFrame, feature_df: pd.DataFrame) -> None:
         st.header("Data Explorer")
@@ -178,19 +166,21 @@ class DashboardRenderer:
         st.set_page_config(page_title="Customer Churn Dashboard", layout="wide")
         st.title("Customer Churn Dashboard")
         st.caption(
-            "Submit a customer record for asynchronous scoring and inspect the reference dataset."
+            "Submit a customer record for local churn scoring and inspect the reference dataset."
         )
 
         df = self.load_reference_data()
         if df is None:
             st.error(
-                f"Dataset not found at {self.config.data_path}. Add the training data to enable the dashboard."
+                f"Dataset not found at {self.config.data_path}. "
+                "Add the training data to enable the dashboard."
             )
             st.stop()
 
         feature_df = df.drop(columns=[self.config.target_column], errors="ignore")
         st.write(
-            f"Loaded {len(df)} cleaned rows and {feature_df.shape[1]} input features from `{self.config.data_path.name}`."
+            f"Loaded {len(df)} cleaned rows and {feature_df.shape[1]} input "
+            f"features from `{self.config.data_path.name}`."
         )
 
         with st.form("prediction_form"):
