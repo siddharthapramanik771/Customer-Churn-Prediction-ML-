@@ -41,7 +41,7 @@ class TrainingMethodologyRenderer:
     def render_workflow(self) -> None:
         st.subheader("Workflow")
         steps = [
-            "Load the customer dataset from `data/data.csv`.",
+            f"Load the customer dataset from `{self.config.data_path.name}`.",
             "Clean column names, string values, missing values, and numeric-looking text.",
             f"Remove the identifier column `{self.config.id_column}` before training.",
             f"Encode `{self.config.target_column}` as a binary target.",
