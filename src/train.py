@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+import json
 from pathlib import Path
 import sys
 from typing import Any
@@ -10,7 +11,14 @@ import mlflow
 import pandas as pd
 from imblearn.over_sampling import SMOTE
 from imblearn.pipeline import Pipeline
-from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.metrics import (
+    accuracy_score,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
 from sklearn.model_selection import GridSearchCV, train_test_split
 from xgboost import XGBClassifier
 
@@ -47,12 +55,33 @@ class TrainingMetrics:
     cv_best_roc_auc: float
     test_roc_auc: float
     test_accuracy: float
+    test_precision: float
+    test_recall: float
+    test_f1: float
+    confusion_matrix: list[list[int]]
+    test_size: float
+    random_state: int
+    cv_folds: int
+    scoring: str
 
-    def to_dict(self) -> dict[str, float]:
+    def to_log_dict(self) -> dict[str, float]:
         return {
             "cv_best_roc_auc": self.cv_best_roc_auc,
             "test_roc_auc": self.test_roc_auc,
             "test_accuracy": self.test_accuracy,
+            "test_precision": self.test_precision,
+            "test_recall": self.test_recall,
+            "test_f1": self.test_f1,
+        }
+
+    def to_artifact_dict(self) -> dict[str, Any]:
+        return {
+            **self.to_log_dict(),
+            "confusion_matrix": self.confusion_matrix,
+            "test_size": self.test_size,
+            "random_state": self.random_state,
+            "cv_folds": self.cv_folds,
+            "scoring": self.scoring,
         }
 
 
@@ -76,13 +105,15 @@ class MLflowTrainingTracker:
         schema: FeatureSchema,
         feature_count: int,
         artifact_path: str,
+        metrics_path: str,
     ) -> None:
         mlflow.log_params(best_params)
-        mlflow.log_metrics(metrics.to_dict())
+        mlflow.log_metrics(metrics.to_log_dict())
         mlflow.log_param("feature_count", feature_count)
         mlflow.log_param("numeric_feature_count", len(schema.numeric_columns))
         mlflow.log_param("categorical_feature_count", len(schema.categorical_columns))
         mlflow.log_artifact(artifact_path)
+        mlflow.log_artifact(metrics_path)
 
 
 class ChurnModelTrainer:
@@ -133,12 +164,14 @@ class ChurnModelTrainer:
                 feature_defaults,
             )
             self.artifact_repository.save(artifact)
+            self.save_metrics_artifact(metrics, grid.best_params_)
             self.tracker.log_run(
                 best_params=grid.best_params_,
                 metrics=metrics,
                 schema=schema,
                 feature_count=X_train.shape[1],
                 artifact_path=str(self.artifact_repository.model_path),
+                metrics_path=str(self.config.metrics_path),
             )
 
         self.print_summary(metrics)
@@ -203,6 +236,31 @@ class ChurnModelTrainer:
             cv_best_roc_auc=cv_best_score,
             test_roc_auc=roc_auc_score(y_test, test_probabilities),
             test_accuracy=accuracy_score(y_test, test_predictions),
+            test_precision=precision_score(y_test, test_predictions, zero_division=0),
+            test_recall=recall_score(y_test, test_predictions, zero_division=0),
+            test_f1=f1_score(y_test, test_predictions, zero_division=0),
+            confusion_matrix=confusion_matrix(y_test, test_predictions).tolist(),
+            test_size=self.settings.test_size,
+            random_state=self.settings.random_state,
+            cv_folds=self.settings.cv_folds,
+            scoring=self.settings.scoring,
+        )
+
+    def save_metrics_artifact(
+        self, metrics: TrainingMetrics, best_params: dict[str, Any]
+    ) -> None:
+        payload = {
+            "metrics": metrics.to_artifact_dict(),
+            "best_params": best_params,
+            "target_column": self.config.target_column,
+            "positive_target_label": self.config.positive_target_label,
+            "negative_target_label": self.config.negative_target_label,
+            "prediction_threshold": self.config.prediction_threshold,
+        }
+        self.config.metrics_path.parent.mkdir(parents=True, exist_ok=True)
+        self.config.metrics_path.write_text(
+            json.dumps(payload, indent=2),
+            encoding="utf-8",
         )
 
     def build_artifact(
@@ -224,9 +282,13 @@ class ChurnModelTrainer:
 
     def print_summary(self, metrics: TrainingMetrics) -> None:
         print("Saved model to", self.artifact_repository.model_path)
+        print("Saved metrics to", self.config.metrics_path)
         print("Best CV ROC AUC:", metrics.cv_best_roc_auc)
         print("Test ROC AUC:", metrics.test_roc_auc)
         print("Test Accuracy:", metrics.test_accuracy)
+        print("Test Precision:", metrics.test_precision)
+        print("Test Recall:", metrics.test_recall)
+        print("Test F1:", metrics.test_f1)
 
 
 def main() -> None:

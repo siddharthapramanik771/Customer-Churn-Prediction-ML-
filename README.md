@@ -730,6 +730,7 @@ Deployment settings:
 - entrypoint: `streamlit_app.py`
 - dependency file: `requirements.txt`
 - required artifact: `models/model.joblib`
+- required metrics report: `models/training_metrics.json`
 - Python version: 3.12
 
 Automated training:
@@ -737,10 +738,9 @@ Automated training:
 - `.github/workflows/ci.yml` runs on every push to `main`
 - the workflow installs `requirements-train.txt`
 - it runs `python -m src.train`
-- if training changes `models/model.joblib`, GitHub Actions commits the updated
-  artifact back to the branch
-- pushes that only update `models/model.joblib` are ignored to avoid a training
-  loop
+- if training changes `models/model.joblib` or `models/training_metrics.json`,
+  GitHub Actions commits the updated artifacts back to the branch
+- pushes that only update trained artifacts are ignored to avoid a training loop
 
 Streamlit Community Cloud setup:
 

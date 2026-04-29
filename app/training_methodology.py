@@ -1,6 +1,21 @@
+from dataclasses import dataclass
+import json
+
+import altair as alt
+import pandas as pd
 import streamlit as st
 
 from src.config import RUNTIME_CONFIG, RuntimeConfig
+
+
+@dataclass(frozen=True)
+class HoldoutMetrics:
+    accuracy: float
+    roc_auc: float
+    precision: float
+    recall: float
+    f1: float
+    confusion: list[list[int]]
 
 
 class TrainingMethodologyRenderer:
@@ -20,6 +35,7 @@ class TrainingMethodologyRenderer:
         self.render_workflow()
         self.render_pipeline()
         self.render_validation()
+        self.render_test_metrics()
         self.render_artifact()
 
     def render_workflow(self) -> None:
@@ -86,6 +102,119 @@ class TrainingMethodologyRenderer:
 """
         )
 
+    def render_test_metrics(self) -> None:
+        st.subheader("Current Test Metrics")
+
+        try:
+            metrics = self.load_saved_metrics()
+        except Exception as exc:
+            st.warning(f"Test metrics are unavailable: {exc}")
+            return
+
+        metric_columns = st.columns(5)
+        metric_columns[0].metric("Accuracy", f"{metrics.accuracy:.2%}")
+        metric_columns[1].metric("ROC AUC", f"{metrics.roc_auc:.3f}")
+        metric_columns[2].metric("Precision", f"{metrics.precision:.2%}")
+        metric_columns[3].metric("Recall", f"{metrics.recall:.2%}")
+        metric_columns[4].metric("F1 score", f"{metrics.f1:.3f}")
+
+        st.write(
+            "These scores were calculated during training and saved as a small "
+            "metrics artifact. The dashboard reads the stored report instead of "
+            "re-evaluating the model at page load."
+        )
+
+        left, right = st.columns(2)
+        left.altair_chart(
+            self.build_metric_chart(metrics),
+            use_container_width=True,
+        )
+        right.altair_chart(
+            self.build_confusion_matrix_chart(metrics),
+            use_container_width=True,
+        )
+
+    def load_saved_metrics(self) -> HoldoutMetrics:
+        if not self.config.metrics_path.exists():
+            raise FileNotFoundError(
+                f"Metrics artifact not found at {self.config.metrics_path}. "
+                "Run training to create it."
+            )
+
+        payload = json.loads(self.config.metrics_path.read_text(encoding="utf-8"))
+        metrics = payload["metrics"]
+        return HoldoutMetrics(
+            accuracy=metrics["test_accuracy"],
+            roc_auc=metrics["test_roc_auc"],
+            precision=metrics["test_precision"],
+            recall=metrics["test_recall"],
+            f1=metrics["test_f1"],
+            confusion=metrics["confusion_matrix"],
+        )
+
+    @staticmethod
+    def build_metric_chart(metrics: HoldoutMetrics) -> alt.Chart:
+        metric_df = pd.DataFrame(
+            [
+                {"metric": "Accuracy", "score": metrics.accuracy},
+                {"metric": "ROC AUC", "score": metrics.roc_auc},
+                {"metric": "Precision", "score": metrics.precision},
+                {"metric": "Recall", "score": metrics.recall},
+                {"metric": "F1", "score": metrics.f1},
+            ]
+        )
+
+        return (
+            alt.Chart(metric_df)
+            .mark_bar(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+            .encode(
+                x=alt.X("metric:N", title=None),
+                y=alt.Y("score:Q", title="Score", scale=alt.Scale(domain=[0, 1])),
+                color=alt.Color("score:Q", legend=None),
+                tooltip=["metric:N", alt.Tooltip("score:Q", format=".3f")],
+            )
+            .properties(height=300)
+        )
+
+    def build_confusion_matrix_chart(self, metrics: HoldoutMetrics) -> alt.Chart:
+        labels = [
+            self.config.negative_target_label,
+            self.config.positive_target_label,
+        ]
+        matrix_rows = []
+        for actual_index, actual_label in enumerate(labels):
+            for predicted_index, predicted_label in enumerate(labels):
+                matrix_rows.append(
+                    {
+                        "actual": actual_label,
+                        "predicted": predicted_label,
+                        "customers": metrics.confusion[actual_index][predicted_index],
+                    }
+                )
+
+        matrix_df = pd.DataFrame(matrix_rows)
+        heatmap = (
+            alt.Chart(matrix_df)
+            .mark_rect()
+            .encode(
+                x=alt.X("predicted:N", title="Predicted"),
+                y=alt.Y("actual:N", title="Actual"),
+                color=alt.Color("customers:Q", title="Customers"),
+                tooltip=["actual:N", "predicted:N", "customers:Q"],
+            )
+        )
+        labels_chart = (
+            alt.Chart(matrix_df)
+            .mark_text(fontSize=18, fontWeight="bold")
+            .encode(
+                x="predicted:N",
+                y="actual:N",
+                text="customers:Q",
+                color=alt.value("white"),
+            )
+        )
+        return (heatmap + labels_chart).properties(height=300)
+
     def render_artifact(self) -> None:
         st.subheader("Saved Model Artifact")
         st.write(
@@ -99,6 +228,7 @@ class TrainingMethodologyRenderer:
 | Artifact Field | Value |
 | --- | --- |
 | Model path | `{self.config.model_path}` |
+| Metrics path | `{self.config.metrics_path}` |
 | Target column | `{self.config.target_column}` |
 | Positive label | `{self.config.positive_target_label}` |
 | Negative label | `{self.config.negative_target_label}` |

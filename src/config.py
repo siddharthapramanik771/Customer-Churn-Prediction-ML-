@@ -11,6 +11,7 @@ class RuntimeConfig:
     project_root: Path
     data_path: Path
     model_path: Path
+    metrics_path: Path
     mlflow_tracking_dir: Path
     target_column: str
     id_column: str
@@ -25,6 +26,7 @@ class RuntimeConfig:
             project_root=project_root,
             data_path=project_root / "data" / "data.csv",
             model_path=project_root / "models" / "model.joblib",
+            metrics_path=project_root / "models" / "training_metrics.json",
             mlflow_tracking_dir=project_root / "mlruns",
             target_column="Churn",
             id_column="customerID",
@@ -48,6 +50,7 @@ class RuntimeConfig:
 
     def ensure_runtime_dirs(self) -> None:
         self.model_path.parent.mkdir(parents=True, exist_ok=True)
+        self.metrics_path.parent.mkdir(parents=True, exist_ok=True)
         self.mlflow_tracking_dir.mkdir(parents=True, exist_ok=True)
 
     @property
