@@ -80,7 +80,7 @@ single responsibility and receives its dependencies explicitly where practical.
 | `DataPreprocessor` | `src/preprocessing.py` | Data cleaning, schema inference, target encoding, defaults |
 | `FeatureSchema` | `src/preprocessing.py` | Numeric and categorical feature groups |
 | `FeatureDefaults` | `src/preprocessing.py` | Prediction-time fallback values |
-| `TrainingSettings` | `src/train.py` | Train/test split, CV folds, scoring, and hyperparameter grid |
+| `TrainingSettings` | `src/training_settings.py` | Train/test split, CV folds, scoring, and hyperparameter grid |
 | `TrainingMetrics` | `src/train.py` | Cross-validation and test metrics |
 | `MLflowTrainingTracker` | `src/train.py` | Experiment tracking through MLflow |
 | `ChurnModelTrainer` | `src/train.py` | End-to-end training orchestration |

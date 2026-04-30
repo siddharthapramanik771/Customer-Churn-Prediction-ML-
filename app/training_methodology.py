@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 
 from src.config import RUNTIME_CONFIG, RuntimeConfig
-from src.train import TrainingSettings
+from src.training_settings import TrainingSettings
 
 
 @dataclass(frozen=True)
