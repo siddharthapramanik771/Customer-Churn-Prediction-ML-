@@ -11,17 +11,20 @@ def apply_page_styles() -> None:
         """
 <style>
     :root {
-        color-scheme: light dark;
-        --app-bg-start: #f7fafc;
-        --app-bg-mid: #eef4f6;
-        --app-bg-end: #f8faf9;
-        --app-ink: #172033;
-        --app-muted: #5c667a;
-        --app-line: rgba(23, 32, 51, 0.12);
-        --app-panel: rgba(255, 255, 255, 0.88);
-        --app-panel-solid: #ffffff;
+        --streamlit-bg: var(--background-color, #f7fafc);
+        --streamlit-panel: var(--secondary-background-color, #ffffff);
+        --streamlit-ink: var(--text-color, #172033);
+        --streamlit-accent: var(--primary-color, #0f9f8f);
+        --app-bg-start: color-mix(in srgb, var(--streamlit-bg) 94%, #ffffff 6%);
+        --app-bg-mid: color-mix(in srgb, var(--streamlit-bg) 86%, #0f9f8f 14%);
+        --app-bg-end: var(--streamlit-bg);
+        --app-ink: var(--streamlit-ink);
+        --app-muted: color-mix(in srgb, var(--streamlit-ink) 66%, var(--streamlit-bg) 34%);
+        --app-line: color-mix(in srgb, var(--streamlit-ink) 14%, transparent);
+        --app-panel: color-mix(in srgb, var(--streamlit-panel) 92%, transparent);
+        --app-panel-solid: var(--streamlit-panel);
         --app-shadow: rgba(23, 32, 51, 0.08);
-        --app-accent: #0f9f8f;
+        --app-accent: var(--streamlit-accent);
         --app-accent-strong: #0a6f86;
         --app-warm: #f4b860;
         --sidebar-bg-start: #102033;
@@ -34,39 +37,15 @@ def apply_page_styles() -> None:
         --tab-active-ink: #ffffff;
     }
 
-    @media (prefers-color-scheme: dark) {
-        :root {
-            --app-bg-start: #0f1722;
-            --app-bg-mid: #101d28;
-            --app-bg-end: #0b111a;
-            --app-ink: #edf4f8;
-            --app-muted: #b8c5cf;
-            --app-line: rgba(237, 244, 248, 0.16);
-            --app-panel: rgba(21, 34, 47, 0.9);
-            --app-panel-solid: #15222f;
-            --app-shadow: rgba(0, 0, 0, 0.28);
-            --sidebar-bg-start: #08131f;
-            --sidebar-bg-end: #10283a;
-            --sidebar-ink: #f8fbfc;
-            --sidebar-muted: #cfe0e8;
-            --button-bg: #f8fbfc;
-            --button-ink: #102033;
-            --tab-active-bg: #0f9f8f;
-            --tab-active-ink: #06161b;
-        }
-    }
-
     html[data-theme="dark"],
     body[data-theme="dark"],
     [data-base-theme="dark"] {
-        --app-bg-start: #0f1722;
-        --app-bg-mid: #101d28;
-        --app-bg-end: #0b111a;
-        --app-ink: #edf4f8;
-        --app-muted: #b8c5cf;
-        --app-line: rgba(237, 244, 248, 0.16);
-        --app-panel: rgba(21, 34, 47, 0.9);
-        --app-panel-solid: #15222f;
+        --app-bg-start: color-mix(in srgb, var(--streamlit-bg) 94%, #000000 6%);
+        --app-bg-mid: color-mix(in srgb, var(--streamlit-bg) 88%, #0f9f8f 12%);
+        --app-bg-end: var(--streamlit-bg);
+        --app-muted: color-mix(in srgb, var(--streamlit-ink) 72%, var(--streamlit-bg) 28%);
+        --app-line: color-mix(in srgb, var(--streamlit-ink) 18%, transparent);
+        --app-panel: color-mix(in srgb, var(--streamlit-panel) 90%, transparent);
         --app-shadow: rgba(0, 0, 0, 0.28);
         --sidebar-bg-start: #08131f;
         --sidebar-bg-end: #10283a;
