@@ -735,12 +735,15 @@ Deployment settings:
 
 Automated training:
 
-- `.github/workflows/ci.yml` runs on every push to `main`
+- `.github/workflows/ci.yml` runs on pushes to `main` only when files that can
+  affect the trained model change, such as `src/**`, `data/**`, or training
+  dependency files
 - the workflow installs `requirements-train.txt`
 - it runs `python -m src.train`
 - if training changes `models/model.joblib` or `models/training_metrics.json`,
   GitHub Actions commits the updated artifacts back to the branch
-- pushes that only update trained artifacts are ignored to avoid a training loop
+- pushes that only update the app UI, README, trained artifacts, or local MLflow
+  output do not retrain the model
 
 Streamlit Community Cloud setup:
 

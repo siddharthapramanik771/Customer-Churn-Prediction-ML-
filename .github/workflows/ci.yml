@@ -3,10 +3,12 @@ name: Train and Validate
 on:
   push:
     branches: [ "main" ]
-    paths-ignore:
-      - "models/model.joblib"
-      - "models/training_metrics.json"
-      - "mlruns/**"
+    paths:
+      - ".github/workflows/ci.yml"
+      - "data/**"
+      - "src/**"
+      - "requirements.txt"
+      - "requirements-train.txt"
   workflow_dispatch:
 
 permissions:
