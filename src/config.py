@@ -25,7 +25,7 @@ class RuntimeConfig:
     def from_project_root(cls, project_root: Path) -> "RuntimeConfig":
         return cls(
             project_root=project_root,
-            data_path=project_root / "data" / "new_data.csv",
+            data_path=project_root / "data" / "data.csv",
             model_path=project_root / "models" / "model.joblib",
             metrics_path=project_root / "models" / "training_metrics.json",
             mlflow_tracking_dir=project_root / "mlruns",
