@@ -8,6 +8,7 @@ import streamlit as st
 from pandas.api.types import is_integer_dtype, is_numeric_dtype
 
 from app.data_analysis import DataAnalysisRenderer
+from app.styles import GITHUB_REPOSITORY_URL, apply_page_styles
 from app.training_methodology import TrainingMethodologyRenderer
 from src.config import RUNTIME_CONFIG, RuntimeConfig
 from src.predict import ChurnPrediction, ChurnPredictor
@@ -91,6 +92,79 @@ class DashboardRenderer:
         self.training_methodology_renderer = TrainingMethodologyRenderer(config)
         self.config = config
 
+    def render_sidebar(self) -> None:
+        with st.sidebar:
+            st.markdown("### Customer Churn ML")
+            st.markdown(
+                "Interactive scoring, dataset analysis, and training notes for the "
+                "customer churn model."
+            )
+            st.link_button("View GitHub repository", GITHUB_REPOSITORY_URL)
+            st.divider()
+            st.markdown("**Model artifact**")
+            st.code(str(self.config.model_path), language=None)
+            st.markdown("**Reference data**")
+            st.code(str(self.config.data_path), language=None)
+
+    @staticmethod
+    def render_hero() -> None:
+        st.markdown(
+            f"""
+<section class="hero">
+    <div class="hero__eyebrow">Machine learning dashboard</div>
+    <h1>Customer Churn Dashboard</h1>
+    <p>
+        Score customer churn risk, inspect the reference data, and review the
+        training workflow behind the deployed XGBoost model.
+    </p>
+    <div class="hero__actions">
+        <a class="hero__link" href="{GITHUB_REPOSITORY_URL}" target="_blank" rel="noopener">
+            GitHub repository
+        </a>
+        <span class="hero__note">Local prediction from the saved model artifact</span>
+    </div>
+</section>
+""",
+            unsafe_allow_html=True,
+        )
+
+    def render_status_strip(
+        self, df: pd.DataFrame, feature_df: pd.DataFrame, source_path: Path
+    ) -> None:
+        churn_rate = "n/a"
+        if self.config.target_column in df.columns:
+            churn_rate = (
+                f"{df[self.config.target_column].astype(str).eq(self.config.positive_target_label).mean():.1%}"
+            )
+
+        st.markdown(
+            f"""
+<div class="status-strip">
+    <div class="status-tile">
+        <span>Clean rows</span>
+        <strong>{len(df):,}</strong>
+        <small>Ready for exploration</small>
+    </div>
+    <div class="status-tile">
+        <span>Input features</span>
+        <strong>{feature_df.shape[1]:,}</strong>
+        <small>Used by prediction form</small>
+    </div>
+    <div class="status-tile">
+        <span>Churn rate</span>
+        <strong>{churn_rate}</strong>
+        <small>From reference dataset</small>
+    </div>
+    <div class="status-tile">
+        <span>Data source</span>
+        <strong>{source_path.name}</strong>
+        <small>Loaded at runtime</small>
+    </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
     @st.cache_data
     def load_reference_data(_self) -> ReferenceDataset | None:
         return _self.reference_data_service.load()
@@ -162,6 +236,8 @@ class DashboardRenderer:
         st.json(result.to_dict())
 
     def render_prediction_tab(self, feature_df: pd.DataFrame) -> None:
+        st.subheader("Predict Churn Risk")
+        st.caption("Enter a customer profile and run the saved pipeline locally.")
         with st.form("prediction_form"):
             payload = self.render_feature_inputs(feature_df)
             submitted = st.form_submit_button("Predict churn risk")
@@ -177,10 +253,9 @@ class DashboardRenderer:
 
     def render(self) -> None:
         st.set_page_config(page_title="Customer Churn Dashboard", layout="wide")
-        st.title("Customer Churn Dashboard")
-        st.caption(
-            "Submit a customer record for local churn scoring and inspect the reference dataset."
-        )
+        apply_page_styles()
+        self.render_sidebar()
+        self.render_hero()
 
         reference_dataset = self.load_reference_data()
         if reference_dataset is None:
@@ -192,10 +267,7 @@ class DashboardRenderer:
 
         df = reference_dataset.frame
         feature_df = df.drop(columns=[self.config.target_column], errors="ignore")
-        st.write(
-            f"Loaded {len(df)} cleaned rows and {feature_df.shape[1]} input "
-            f"features from `{reference_dataset.source_path.name}`."
-        )
+        self.render_status_strip(df, feature_df, reference_dataset.source_path)
 
         prediction_tab, analysis_tab, methodology_tab = st.tabs(
             ["Predict", "Data Analysis", "Training Methodology"]
