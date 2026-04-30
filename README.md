@@ -39,8 +39,8 @@ The model also produces a churn probability. The probability is converted into a
 final label using a configurable threshold.
 
 ```text
-probability >= 0.5 -> Yes
-probability < 0.5  -> No
+probability >= 0.7 -> Yes
+probability < 0.7  -> No
 ```
 
 ## Repository Layout
@@ -358,6 +358,51 @@ XGBClassifier(
 )
 ```
 
+The current saved model selected by grid search also uses:
+
+```python
+XGBClassifier(
+    n_estimators=200,
+    max_depth=4,
+    learning_rate=0.05,
+    tree_method="hist",
+    eval_metric="logloss",
+    random_state=42,
+)
+```
+
+## Model Structure
+
+The saved model artifact is one fitted `imblearn.pipeline.Pipeline`. It keeps
+feature transformation, class balancing, and the classifier together so training,
+cross-validation, persistence, and app-time prediction all use the same
+structure.
+
+| Layer | Current Structure |
+| --- | --- |
+| Raw model input | 31 customer feature columns after removing `customerID` and separating `Churn` |
+| Numeric branch | 14 numeric features transformed with `StandardScaler` |
+| Categorical branch | 17 categorical features transformed with `OneHotEncoder(handle_unknown="ignore")` |
+| Transformed feature space | 57 model-ready columns in the current fitted artifact |
+| Training sampler | `SMOTE(random_state=42)`, applied only to training folds |
+| Classifier | `XGBClassifier` with 200 boosted trees, max depth 4, and learning rate 0.05 |
+| Decision rule | Churn probability >= 0.7 returns `Yes`; otherwise `No` |
+
+```mermaid
+flowchart LR
+    A["Raw customer data<br/>31 input features"] --> B["Cleaning<br/>strip whitespace, convert numeric text, drop missing rows, remove customerID"]
+    B --> C["Feature split<br/>14 numeric + 17 categorical"]
+    C --> D["ColumnTransformer"]
+    D --> E["StandardScaler<br/>numeric columns"]
+    D --> F["OneHotEncoder<br/>categorical columns"]
+    E --> G["57 transformed features"]
+    F --> G
+    G --> H["SMOTE<br/>training folds only"]
+    H --> I["XGBClassifier<br/>200 trees, depth 4, learning rate 0.05"]
+    I --> J["Churn probability"]
+    J --> K["Threshold 0.7<br/>Yes or No"]
+```
+
 ## Training Pipeline
 
 The full pipeline is:
@@ -485,7 +530,7 @@ final label.
 Default threshold:
 
 ```python
-prediction_threshold = 0.5
+prediction_threshold = 0.7
 ```
 
 Tradeoff:
@@ -550,7 +595,7 @@ The artifact payload must contain a `pipeline` key.
     "target_column": "Churn",
     "positive_target_label": "Yes",
     "negative_target_label": "No",
-    "prediction_threshold": 0.5,
+    "prediction_threshold": 0.7,
 }
 ```
 

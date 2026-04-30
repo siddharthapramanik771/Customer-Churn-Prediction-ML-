@@ -205,6 +205,50 @@ def apply_page_styles() -> None:
         border-radius: 8px;
     }
 
+    .model-structure-diagram {
+        align-items: stretch;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.55rem;
+        margin: 0.8rem 0 1.1rem;
+    }
+
+    .model-structure-node {
+        background: var(--app-panel);
+        border: 1px solid var(--app-line);
+        border-radius: 8px;
+        box-shadow: 0 8px 22px var(--app-shadow);
+        flex: 1 1 145px;
+        min-width: 0;
+        padding: 0.85rem;
+    }
+
+    .model-structure-node strong,
+    .model-structure-node span {
+        display: block;
+    }
+
+    .model-structure-node strong {
+        font-size: 0.92rem;
+        line-height: 1.25;
+    }
+
+    .model-structure-node span {
+        font-size: 0.78rem;
+        line-height: 1.35;
+        margin-top: 0.28rem;
+        opacity: 0.72;
+    }
+
+    .model-structure-arrow {
+        align-items: center;
+        display: flex;
+        font-weight: 800;
+        justify-content: center;
+        min-width: 1.15rem;
+        opacity: 0.62;
+    }
+
     .stTabs [data-baseweb="tab-list"] {
         border-bottom: 0 !important;
         gap: 0.45rem;
@@ -275,6 +319,14 @@ def apply_page_styles() -> None:
 
         .status-strip {
             grid-template-columns: 1fr;
+        }
+
+        .model-structure-node {
+            flex-basis: 100%;
+        }
+
+        .model-structure-arrow {
+            display: none;
         }
     }
 </style>

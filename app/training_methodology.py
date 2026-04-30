@@ -41,6 +41,7 @@ class TrainingMethodologyRenderer:
 
         self.render_workflow()
         self.render_pipeline()
+        self.render_model_structure()
         self.render_validation()
         self.render_test_metrics()
         self.render_artifact()
@@ -81,6 +82,79 @@ class TrainingMethodologyRenderer:
             "SMOTE is inside the training pipeline, so it is applied only to "
             "training folds during cross-validation. The final test data remains untouched."
         )
+
+    def render_model_structure(self) -> None:
+        st.subheader("Model Structure")
+        st.write(
+            "The saved artifact is one fitted imbalanced-learn pipeline. "
+            "It keeps preprocessing, SMOTE balancing, and XGBoost together so "
+            "the dashboard uses the same transformations that were fitted during training."
+        )
+
+        st.markdown(
+            """
+<div class="model-structure-diagram" aria-label="Model structure diagram">
+    <div class="model-structure-node">
+        <strong>Raw features</strong>
+        <span>31 customer columns after target and ID handling</span>
+    </div>
+    <div class="model-structure-arrow">&rarr;</div>
+    <div class="model-structure-node">
+        <strong>ColumnTransformer</strong>
+        <span>14 numeric scaled features and 17 categorical encoded features</span>
+    </div>
+    <div class="model-structure-arrow">&rarr;</div>
+    <div class="model-structure-node">
+        <strong>SMOTE</strong>
+        <span>Synthetic minority samples inside training folds only</span>
+    </div>
+    <div class="model-structure-arrow">&rarr;</div>
+    <div class="model-structure-node">
+        <strong>XGBoost</strong>
+        <span>Gradient-boosted trees produce churn probability</span>
+    </div>
+    <div class="model-structure-arrow">&rarr;</div>
+    <div class="model-structure-node">
+        <strong>Decision rule</strong>
+        <span>Probability threshold maps score to Yes or No</span>
+    </div>
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
+        best_params = self.load_saved_best_params()
+        n_estimators = best_params.get("model__n_estimators", "selected by grid search")
+        max_depth = best_params.get("model__max_depth", "selected by grid search")
+        learning_rate = best_params.get(
+            "model__learning_rate", "selected by grid search"
+        )
+
+        st.markdown(
+            f"""
+| Layer | Current Structure |
+| --- | --- |
+| Raw model input | 31 feature columns after removing `{self.config.id_column}` and separating `{self.config.target_column}` |
+| Numeric branch | 14 numeric features transformed with `StandardScaler` |
+| Categorical branch | 17 categorical features transformed with `OneHotEncoder(handle_unknown="ignore")` |
+| Transformed feature space | 57 model-ready columns in the current fitted artifact |
+| Training sampler | `SMOTE(random_state={self.settings.random_state})`, applied only to training folds |
+| Classifier | `XGBClassifier(n_estimators={n_estimators}, max_depth={max_depth}, learning_rate={learning_rate})` |
+| Decision rule | Probability >= `{self.config.prediction_threshold}` returns `{self.config.positive_target_label}`; otherwise `{self.config.negative_target_label}` |
+"""
+        )
+
+    def load_saved_best_params(self) -> dict[str, object]:
+        if not self.config.metrics_path.exists():
+            return {}
+
+        try:
+            payload = json.loads(self.config.metrics_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+        best_params = payload.get("best_params", {})
+        return best_params if isinstance(best_params, dict) else {}
 
     def render_validation(self) -> None:
         st.subheader("Validation Strategy")
