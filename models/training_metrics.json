@@ -1,19 +1,19 @@
 {
   "metrics": {
-    "cv_best_roc_auc": 0.9601367838549227,
-    "test_roc_auc": 0.9664450202018372,
-    "test_accuracy": 0.9429429429429429,
-    "test_precision": 0.927536231884058,
-    "test_recall": 0.6597938144329897,
-    "test_f1": 0.7710843373493976,
+    "cv_best_roc_auc": 0.9597857798498137,
+    "test_roc_auc": 0.9675864692986429,
+    "test_accuracy": 0.9459459459459459,
+    "test_precision": 0.9066666666666666,
+    "test_recall": 0.7010309278350515,
+    "test_f1": 0.7906976744186046,
     "confusion_matrix": [
       [
-        564,
-        5
+        562,
+        7
       ],
       [
-        33,
-        64
+        29,
+        68
       ]
     ],
     "test_size": 0.2,
@@ -22,12 +22,9 @@
     "scoring": "roc_auc"
   },
   "best_params": {
-    "model__colsample_bytree": 0.8,
-    "model__learning_rate": 0.03,
+    "model__learning_rate": 0.05,
     "model__max_depth": 4,
-    "model__min_child_weight": 1,
-    "model__n_estimators": 500,
-    "model__subsample": 1.0
+    "model__n_estimators": 200
   },
   "training_data_path": "data/data.csv",
   "training_data_name": "data.csv",
