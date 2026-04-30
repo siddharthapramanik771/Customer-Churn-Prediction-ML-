@@ -49,12 +49,16 @@ def apply_page_styles() -> None:
 
     [data-testid="stSidebar"] .stDownloadButton > button {
         background: #ffffff;
-        color: #102033;
+        color: #102033 !important;
         width: 100%;
     }
 
+    [data-testid="stSidebar"] .stDownloadButton > button * {
+        color: #102033 !important;
+    }
+
     [data-testid="stSidebar"] .stDownloadButton > button:hover {
-        color: #102033;
+        color: #102033 !important;
     }
 
     .hero {
