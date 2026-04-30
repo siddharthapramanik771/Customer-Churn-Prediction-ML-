@@ -61,6 +61,23 @@ def apply_page_styles() -> None:
         color: #102033 !important;
     }
 
+    [data-testid="stSidebar"] .stButton > a,
+    [data-testid="stSidebar"] .stButton > button {
+        background: #ffffff;
+        color: #102033 !important;
+        width: 100%;
+    }
+
+    [data-testid="stSidebar"] .stButton > a *,
+    [data-testid="stSidebar"] .stButton > button * {
+        color: #102033 !important;
+    }
+
+    [data-testid="stSidebar"] .stButton > a:hover,
+    [data-testid="stSidebar"] .stButton > button:hover {
+        color: #102033 !important;
+    }
+
     .hero {
         border: 1px solid rgba(255, 255, 255, 0.7);
         border-radius: 8px;
