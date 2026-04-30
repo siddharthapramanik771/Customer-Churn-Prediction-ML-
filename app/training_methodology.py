@@ -1,11 +1,13 @@
 from dataclasses import dataclass
 import json
+from pprint import pformat
 
 import altair as alt
 import pandas as pd
 import streamlit as st
 
 from src.config import RUNTIME_CONFIG, RuntimeConfig
+from src.train import TrainingSettings
 
 
 @dataclass(frozen=True)
@@ -21,8 +23,13 @@ class HoldoutMetrics:
 class TrainingMethodologyRenderer:
     """Renders a readable explanation of the model training workflow."""
 
-    def __init__(self, config: RuntimeConfig = RUNTIME_CONFIG) -> None:
+    def __init__(
+        self,
+        config: RuntimeConfig = RUNTIME_CONFIG,
+        settings: TrainingSettings | None = None,
+    ) -> None:
         self.config = config
+        self.settings = settings or TrainingSettings()
 
     def render(self) -> None:
         st.header("Training Methodology")
@@ -79,25 +86,25 @@ class TrainingMethodologyRenderer:
         st.subheader("Validation Strategy")
 
         columns = st.columns(3)
-        columns[0].metric("Test split", "20%")
-        columns[1].metric("CV folds", "3")
-        columns[2].metric("Selection metric", "ROC AUC")
+        columns[0].metric("Test split", f"{self.settings.test_size:.0%}")
+        columns[1].metric("CV folds", str(self.settings.cv_folds))
+        columns[2].metric("Selection metric", self.settings.scoring.upper())
 
+        searched_parameters = ", ".join(
+            f"`{name.removeprefix('model__')}`" for name in self.settings.param_grid
+        )
         st.write(
             "The train/test split is stratified to preserve the churn/non-churn "
             "ratio in both sets. Grid search evaluates combinations of "
-            "`n_estimators`, `max_depth`, and `learning_rate`, then keeps the "
+            f"{searched_parameters}, then keeps the "
             "pipeline with the best cross-validated ROC AUC."
         )
 
+        param_grid_source = pformat(self.settings.param_grid, width=88, sort_dicts=False)
         st.markdown(
-            """
+            f"""
 ```python
-{
-    "model__n_estimators": [100, 200],
-    "model__max_depth": [4, 6],
-    "model__learning_rate": [0.01, 0.05],
-}
+{param_grid_source}
 ```
 """
         )
