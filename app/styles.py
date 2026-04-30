@@ -11,22 +11,12 @@ def apply_page_styles() -> None:
         """
 <style>
     :root {
-        --streamlit-bg: var(--background-color, #f7fafc);
-        --streamlit-panel: var(--secondary-background-color, #ffffff);
-        --streamlit-ink: var(--text-color, #172033);
-        --streamlit-accent: var(--primary-color, #0f9f8f);
-        --app-bg-start: color-mix(in srgb, var(--streamlit-bg) 94%, #ffffff 6%);
-        --app-bg-mid: color-mix(in srgb, var(--streamlit-bg) 86%, #0f9f8f 14%);
-        --app-bg-end: var(--streamlit-bg);
-        --app-ink: var(--streamlit-ink);
-        --app-muted: color-mix(in srgb, var(--streamlit-ink) 66%, var(--streamlit-bg) 34%);
-        --app-line: color-mix(in srgb, var(--streamlit-ink) 14%, transparent);
-        --app-panel: color-mix(in srgb, var(--streamlit-panel) 92%, transparent);
-        --app-panel-solid: var(--streamlit-panel);
-        --app-shadow: rgba(23, 32, 51, 0.08);
-        --app-accent: var(--streamlit-accent);
+        --app-panel: rgba(127, 127, 127, 0.10);
+        --app-panel-hover: rgba(127, 127, 127, 0.16);
+        --app-line: rgba(127, 127, 127, 0.24);
+        --app-shadow: rgba(0, 0, 0, 0.10);
+        --app-accent: #0f9f8f;
         --app-accent-strong: #0a6f86;
-        --app-warm: #f4b860;
         --sidebar-bg-start: #102033;
         --sidebar-bg-end: #17374b;
         --sidebar-ink: #f8fbfc;
@@ -35,34 +25,6 @@ def apply_page_styles() -> None:
         --button-ink: #102033;
         --tab-active-bg: #10334a;
         --tab-active-ink: #ffffff;
-    }
-
-    html[data-theme="dark"],
-    body[data-theme="dark"],
-    [data-base-theme="dark"] {
-        --app-bg-start: color-mix(in srgb, var(--streamlit-bg) 94%, #000000 6%);
-        --app-bg-mid: color-mix(in srgb, var(--streamlit-bg) 88%, #0f9f8f 12%);
-        --app-bg-end: var(--streamlit-bg);
-        --app-muted: color-mix(in srgb, var(--streamlit-ink) 72%, var(--streamlit-bg) 28%);
-        --app-line: color-mix(in srgb, var(--streamlit-ink) 18%, transparent);
-        --app-panel: color-mix(in srgb, var(--streamlit-panel) 90%, transparent);
-        --app-shadow: rgba(0, 0, 0, 0.28);
-        --sidebar-bg-start: #08131f;
-        --sidebar-bg-end: #10283a;
-        --sidebar-ink: #f8fbfc;
-        --sidebar-muted: #cfe0e8;
-        --button-bg: #f8fbfc;
-        --button-ink: #102033;
-        --tab-active-bg: #0f9f8f;
-        --tab-active-ink: #06161b;
-    }
-
-    .stApp {
-        background:
-            radial-gradient(circle at 16% 18%, rgba(15, 159, 143, 0.13), transparent 28%),
-            radial-gradient(circle at 86% 10%, rgba(244, 184, 96, 0.16), transparent 26%),
-            linear-gradient(180deg, var(--app-bg-start) 0%, var(--app-bg-mid) 48%, var(--app-bg-end) 100%);
-        color: var(--app-ink);
     }
 
     .block-container {
@@ -191,6 +153,7 @@ def apply_page_styles() -> None:
         border: 1px solid var(--app-line);
         border-radius: 8px;
         box-shadow: 0 10px 28px var(--app-shadow);
+        color: inherit;
     }
 
     .status-tile {
@@ -198,25 +161,25 @@ def apply_page_styles() -> None:
     }
 
     .status-tile span {
-        color: var(--app-muted);
         display: block;
         font-size: 0.78rem;
         font-weight: 700;
         margin-bottom: 0.35rem;
+        opacity: 0.72;
         text-transform: uppercase;
     }
 
     .status-tile strong {
-        color: var(--app-ink);
+        color: inherit;
         display: block;
         font-size: 1.35rem;
         line-height: 1.2;
     }
 
     .status-tile small {
-        color: var(--app-muted);
         display: block;
         margin-top: 0.3rem;
+        opacity: 0.68;
     }
 
     div[data-testid="stMetric"] {
@@ -225,12 +188,12 @@ def apply_page_styles() -> None:
 
     div[data-testid="stMetric"] *,
     div[data-testid="stMetricValue"] * {
-        color: var(--app-ink) !important;
+        color: inherit !important;
     }
 
     div[data-testid="stMetricLabel"] *,
     div[data-testid="stMetric"] label {
-        color: var(--app-muted) !important;
+        opacity: 0.72;
     }
 
     div[data-testid="stForm"] {
@@ -242,13 +205,6 @@ def apply_page_styles() -> None:
         border-radius: 8px;
     }
 
-    div[data-baseweb="select"] *,
-    div[data-testid="stNumberInput"] *,
-    div[data-testid="stTextInput"] *,
-    textarea {
-        color: var(--app-ink) !important;
-    }
-
     .stTabs [data-baseweb="tab-list"] {
         gap: 0.45rem;
     }
@@ -257,13 +213,13 @@ def apply_page_styles() -> None:
         background: var(--app-panel);
         border: 1px solid var(--app-line);
         border-radius: 8px;
-        color: var(--app-ink) !important;
+        color: inherit !important;
         font-weight: 700;
         padding: 0.65rem 1rem;
     }
 
     .stTabs [data-baseweb="tab"] * {
-        color: var(--app-ink) !important;
+        color: inherit !important;
     }
 
     .stTabs [aria-selected="true"] {
