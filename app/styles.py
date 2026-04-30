@@ -167,6 +167,15 @@ def apply_page_styles() -> None:
         box-shadow: 0 8px 22px rgba(23, 32, 51, 0.06);
     }
 
+    div[data-testid="stMetric"] * {
+        color: var(--ink);
+    }
+
+    div[data-testid="stMetric"] label,
+    div[data-testid="stMetric"] [data-testid="stMetricLabel"] {
+        color: var(--muted);
+    }
+
     div[data-testid="stForm"] {
         background: rgba(255, 255, 255, 0.72);
         border: 1px solid var(--line);

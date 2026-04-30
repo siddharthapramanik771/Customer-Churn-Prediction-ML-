@@ -92,7 +92,7 @@ class DashboardRenderer:
         self.training_methodology_renderer = TrainingMethodologyRenderer(config)
         self.config = config
 
-    def render_sidebar(self, reference_dataset: ReferenceDataset | None = None) -> None:
+    def render_sidebar(self) -> None:
         with st.sidebar:
             st.markdown("### Customer Churn ML")
             st.markdown(
@@ -101,31 +101,19 @@ class DashboardRenderer:
             )
             st.link_button("View GitHub repository", GITHUB_REPOSITORY_URL)
             st.divider()
-            st.markdown("### Reference Data")
+            st.markdown("### Model Artifact")
 
-            if reference_dataset is None:
-                st.info("Reference data will appear here after the dataset loads.")
+            if not self.config.model_path.exists():
+                st.info("Train the model to enable artifact download.")
                 return
 
-            csv_data = reference_dataset.frame.to_csv(index=False).encode("utf-8")
             st.download_button(
-                "Download cleaned CSV",
-                data=csv_data,
-                file_name="customer_churn_cleaned_data.csv",
-                mime="text/csv",
+                "Download model",
+                data=self.config.model_path.read_bytes(),
+                file_name=self.config.model_path.name,
+                mime="application/octet-stream",
                 use_container_width=True,
             )
-
-            with st.expander("Preview data", expanded=True):
-                st.caption(
-                    f"{len(reference_dataset.frame):,} rows from "
-                    f"{reference_dataset.source_path.name}"
-                )
-                st.dataframe(
-                    reference_dataset.frame.head(50),
-                    use_container_width=True,
-                    height=320,
-                )
 
     @staticmethod
     def render_hero() -> None:
@@ -292,7 +280,7 @@ class DashboardRenderer:
 
         df = reference_dataset.frame
         feature_df = df.drop(columns=[self.config.target_column], errors="ignore")
-        self.render_sidebar(reference_dataset)
+        self.render_sidebar()
         self.render_status_strip(df, feature_df, reference_dataset.source_path)
 
         prediction_tab, analysis_tab, methodology_tab = st.tabs(
