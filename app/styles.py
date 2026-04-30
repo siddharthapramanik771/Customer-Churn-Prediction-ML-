@@ -47,17 +47,34 @@ def apply_page_styles() -> None:
         border: 1px solid rgba(255, 255, 255, 0.22);
     }
 
-    [data-testid="stSidebar"] .stDownloadButton > button {
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] button,
+    [data-testid="stSidebar"] [data-testid="stLinkButton"] a {
         background: #ffffff;
         color: #102033 !important;
         width: 100%;
     }
 
-    [data-testid="stSidebar"] .stDownloadButton > button * {
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] button *,
+    [data-testid="stSidebar"] [data-testid="stLinkButton"] a * {
         color: #102033 !important;
     }
 
-    [data-testid="stSidebar"] .stDownloadButton > button:hover {
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] button:hover,
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] button:focus,
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] button:active,
+    [data-testid="stSidebar"] [data-testid="stLinkButton"] a:hover,
+    [data-testid="stSidebar"] [data-testid="stLinkButton"] a:focus,
+    [data-testid="stSidebar"] [data-testid="stLinkButton"] a:active {
+        background: #ffffff;
+        color: #102033 !important;
+    }
+
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] button:hover *,
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] button:focus *,
+    [data-testid="stSidebar"] [data-testid="stDownloadButton"] button:active *,
+    [data-testid="stSidebar"] [data-testid="stLinkButton"] a:hover *,
+    [data-testid="stSidebar"] [data-testid="stLinkButton"] a:focus *,
+    [data-testid="stSidebar"] [data-testid="stLinkButton"] a:active * {
         color: #102033 !important;
     }
 
