@@ -42,6 +42,21 @@ def apply_page_styles() -> None:
         color: #f8fbfc;
     }
 
+    [data-testid="stSidebar"] [data-testid="stDataFrame"] {
+        background: #ffffff;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+    }
+
+    [data-testid="stSidebar"] .stDownloadButton > button {
+        background: #ffffff;
+        color: #102033;
+        width: 100%;
+    }
+
+    [data-testid="stSidebar"] .stDownloadButton > button:hover {
+        color: #102033;
+    }
+
     .hero {
         border: 1px solid rgba(255, 255, 255, 0.7);
         border-radius: 8px;
@@ -174,6 +189,10 @@ def apply_page_styles() -> None:
     .stTabs [aria-selected="true"] {
         background: #10334a;
         color: #ffffff;
+    }
+
+    .stTabs [data-baseweb="tab-highlight"] {
+        display: none;
     }
 
     .stButton > button,
