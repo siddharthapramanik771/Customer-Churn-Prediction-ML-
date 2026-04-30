@@ -28,14 +28,6 @@ def apply_page_styles() -> None:
         color: var(--ink);
     }
 
-    .stApp,
-    .stApp p,
-    .stApp label,
-    .stApp span,
-    .stApp div {
-        color: var(--ink);
-    }
-
     .block-container {
         padding-top: 2rem;
         padding-bottom: 3rem;
@@ -180,36 +172,18 @@ def apply_page_styles() -> None:
     }
 
     div[data-testid="stMetric"] * {
-        color: var(--ink) !important;
+        color: var(--ink);
     }
 
     div[data-testid="stMetric"] label,
-    div[data-testid="stMetric"] [data-testid="stMetricLabel"],
-    div[data-testid="stMetric"] [data-testid="stMetricLabel"] * {
-        color: var(--muted) !important;
-    }
-
-    div[data-testid="stMetricValue"],
-    div[data-testid="stMetricValue"] * {
-        color: #0b1f3a !important;
-        font-weight: 800;
-    }
-
-    div[data-testid="stMetricDelta"],
-    div[data-testid="stMetricDelta"] * {
-        color: var(--accent-strong) !important;
+    div[data-testid="stMetric"] [data-testid="stMetricLabel"] {
+        color: var(--muted);
     }
 
     div[data-testid="stForm"] {
         background: rgba(255, 255, 255, 0.72);
         border: 1px solid var(--line);
         padding: 1.15rem;
-    }
-
-    div[data-baseweb="select"] *,
-    div[data-testid="stNumberInput"] *,
-    div[data-testid="stTextInput"] * {
-        color: var(--ink) !important;
     }
 
     .stTabs [data-baseweb="tab-list"] {
@@ -220,22 +194,14 @@ def apply_page_styles() -> None:
         background: rgba(255, 255, 255, 0.78);
         border: 1px solid var(--line);
         border-radius: 8px;
-        color: var(--ink) !important;
+        color: var(--ink);
         font-weight: 700;
         padding: 0.65rem 1rem;
     }
 
-    .stTabs [data-baseweb="tab"] * {
-        color: var(--ink) !important;
-    }
-
     .stTabs [aria-selected="true"] {
         background: #10334a;
-        color: #ffffff !important;
-    }
-
-    .stTabs [aria-selected="true"] * {
-        color: #ffffff !important;
+        color: #ffffff;
     }
 
     .stTabs [data-baseweb="tab-highlight"] {

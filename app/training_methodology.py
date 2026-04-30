@@ -200,19 +200,13 @@ class TrainingMethodologyRenderer:
                 )
 
         matrix_df = pd.DataFrame(matrix_rows)
-        max_customers = matrix_df["customers"].max()
-        text_threshold = max_customers * 0.55
         heatmap = (
             alt.Chart(matrix_df)
             .mark_rect()
             .encode(
                 x=alt.X("predicted:N", title="Predicted"),
                 y=alt.Y("actual:N", title="Actual"),
-                color=alt.Color(
-                    "customers:Q",
-                    title="Customers",
-                    scale=alt.Scale(scheme="blues", domain=[0, max_customers]),
-                ),
+                color=alt.Color("customers:Q", title="Customers"),
                 tooltip=["actual:N", "predicted:N", "customers:Q"],
             )
         )
@@ -223,20 +217,10 @@ class TrainingMethodologyRenderer:
                 x="predicted:N",
                 y="actual:N",
                 text="customers:Q",
-                color=alt.condition(
-                    alt.datum.customers >= text_threshold,
-                    alt.value("white"),
-                    alt.value("#0b1f3a"),
-                ),
+                color=alt.value("white"),
             )
         )
-        return (
-            (heatmap + labels_chart)
-            .properties(height=300)
-            .configure_axis(labelColor="#172033", titleColor="#172033")
-            .configure_legend(labelColor="#172033", titleColor="#172033")
-            .configure_view(strokeWidth=0)
-        )
+        return (heatmap + labels_chart).properties(height=300)
 
     def render_artifact(self) -> None:
         st.subheader("Saved Model Artifact")
